@@ -83,22 +83,42 @@ data <- data %>%
 ihad_sa1 <- full_join(sa12016, data, "sa1_main_2016") %>% 
   filter(gcc_name_2016 %in% c("Greater Melbourne", "Greater Sydney"))
 
-ihad_melb <- ihad_sa1 %>% 
+ihad_sa1_melb <- ihad_sa1 %>% 
   filter(gcc_name_2016 == "Greater Melbourne")
 
-ihad_syd <- ihad_sa1 %>% 
+ihad_sa1_syd <- ihad_sa1 %>% 
   filter(gcc_name_2016 == "Greater Sydney")
 
-ggplot(data = ihad_melb) +
+map_sa1_melb <- 
+  ggplot(data = ihad_sa1_melb) +
   geom_sf(aes(geometry = geometry,
               fill = percentage_q1),
           lwd = 0) +
   scale_fill_gradientn(colours = grattan_pal(6)) +
   theme_grattan() +
+  theme(legend.position = "right",
+        legend.direction = "vertical") +
   coord_sf(datum = NA) +
-  labs(fill = "Percentage of households in the bottom IHAD quartile")
-  
+  labs(title = "Disadvantage across Greater Melbourne", 
+       subtitle = "Percentage of households in the bottom IHAD quartile",
+       fill = "Percentage")
 
+map_sa1_syd <- 
+  ggplot(data = ihad_sa1_syd) +
+  geom_sf(aes(geometry = geometry,
+              fill = percentage_q1),
+          lwd = 0) +
+  scale_fill_gradientn(colours = grattan_pal(6)) +
+  theme_grattan() +
+  theme(legend.position = "right",
+        legend.direction = "vertical") +
+  coord_sf(datum = NA) +
+  labs(title = "Disadvantage across Greater Sydney", 
+       subtitle = "Percentage of households in the bottom IHAD quartile",
+       fill = "Percentage")  
+
+map_sa1_melb
+map_sa1_syd
   
 
 
@@ -106,4 +126,80 @@ ggplot(data = ihad_melb) +
 
 ## Aggregating the data to SA2s or SA3s
 
+Now that we've mapped the SA1s, we can see that several areas are unpopulated. We will now aggregate to the SA2 level, and try to increase interactivity in the map (hover to see the SA2 name). 
+
+The proportion of households facing disadvantage (i.e. in the lowest quartile) can be determined by summing the number of disadvantaged households in each SA2 and dividing by the total number of in-scope households.
+
+```{r Aggregating to SA2}
+
+# We need correspond the sa1 data to sa2s, then append to sa2 geometry.
+
+corresp_sa1_to_sa2 <- tibble(sa1_main_2016 = sa12016$sa1_main_2016, 
+                             sa2_main_2016 = sa12016$sa2_main_2016)
+
+ihad_agg <- data %>% 
+  full_join(corresp_sa1_to_sa2, by = "sa1_main_2016") %>% 
+  mutate(n_q1 = percentage_q1*dwellings_in_scope,
+         n_q2 = percentage_q2*dwellings_in_scope,
+         n_q3 = percentage_q3*dwellings_in_scope,
+         n_q4 = percentage_q4*dwellings_in_scope) %>% 
+  group_by(sa2_main_2016) %>%
+  summarise(n_q1 = sum(n_q1, na.rm = TRUE),
+            n_q2 = sum(n_q2, na.rm = TRUE),
+            n_q3 = sum(n_q3, na.rm = TRUE),
+            n_q4 = sum(n_q4, na.rm = TRUE),
+            dwellings_in_scope = sum(dwellings_in_scope, na.rm = TRUE),
+            dwellings_total = sum(dwellings_total, na.rm = TRUE),
+            population = sum(population, na.rm = TRUE)) %>% 
+  mutate(percentage_q1 = n_q1/dwellings_in_scope,
+         approx_number_households = percentage_q1*dwellings_total/100) %>% 
+  full_join(sa22016, by = "sa2_main_2016")
+  
+# One SA2 is a clear outlier - Braeside in Melbourne (100%). It has a low sample size, about 11 households. We exclude those SA2s with more than 60% of households in the bottom quartile.
+
+ihad_sa2_melb <- ihad_agg %>% 
+  filter(gcc_name_2016 == "Greater Melbourne",
+         percentage_q1 <= 60)
+
+ihad_sa2_syd <- ihad_agg %>% 
+  filter(gcc_name_2016 == "Greater Sydney",
+         percentage_q1 <= 60)
+
+map_sa2_melb <- 
+  ggplot(data = ihad_sa2_melb) +
+  geom_sf(aes(geometry = geometry,
+              fill = percentage_q1),
+          lwd = 0) +
+  geom_point(aes(x = cent_lat,
+                 y = cent_long,
+                 size = approx_number_households),
+             colour = "black",
+             alpha = 0.5) +
+  scale_size(range = c(0.1, 1)) +
+  scale_fill_gradientn(colours = grattan_pal(6)) +
+  theme_grattan() +
+  theme(legend.position = "right",
+        legend.direction = "vertical") +
+  coord_sf(datum = NA) +
+  labs(title = "Disadvantage across Greater Melbourne", 
+       subtitle = "Percentage of households in the bottom IHAD quartile",
+       fill = "Percentage")
+  
+map_sa2_melb
+ 
+library(tmap)
+tmap_mode("view")
+sf_sa2_melb <- st_as_sf(ihad_sa2_melb)
+tm_shape(sf_sa2_melb) + 
+  tm_fill(col = "percentage_q1", 
+          palette = grattan_pal(6),
+          alpha = 0.5) +
+  tm_bubbles(size = "approx_number_households", 
+             col = "black", 
+             border.col = "white", 
+             alpha = 0.5) +
+  tm_borders(col = grattan_grey1, lwd = 0.5)
+ 
+  
+```
 
