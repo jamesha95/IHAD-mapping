@@ -1,0 +1,109 @@
+---
+title: "Mapping the ABS experimental Index of Household Advantage and Disadvantage (IHAD)"
+output: 
+  html_document:
+    code_folding: show
+---
+https://github.com/jamesha95/IHAD-mapping.git
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      results = "hide", 
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+## Background
+
+In 2019, the ABS released the experimental Index of Household Advantage and Disadvantage. This variable assigns a socio-economic score to each eligible household in the 2016 Census, and then allocates the households to a quartile (not population-weighted). 
+
+This variable is not yet available in TableBuilder for cross-classification (as of March 25th, 2019). This is unfortunate; it would be very helpful to be able to investigate the relationship between socio-economic disadvantage and other characteristics. 
+
+So far, the most disaggregated information available is only the percentage of households in each quartile, at the SA1 level. In this script, we will map the proportion of households in the bottom quartile for each SA1, and then aggregate to SA2 (weighting by household, and then by population to see if there's much difference). We may then further compare to SEIFA indices. 
+
+IHAD may end up being nothing more than a slightly more nuanced version of SEIFA, where statistical areas are described not by one score but by four (that is, the proportion of households in each IHAD quartile). But hopefully it becomes available in TableBuilder in the near future to allow easy analysis of socio-economic disadvantage without the ecological validity issues of SEIFA.
+
+To begin, we import the data from the [ABS website](https://www.abs.gov.au/AUSSTATS/abs@.nsf/DetailsPage/4198.02016?OpenDocument). We've named the file `sa1-ihad-percentages.xls` and stored it in the folder named `data`.
+
+```{r Importing the data}
+
+# Packages first
+
+library(devtools)
+#install_github("wfmackey/absmapsdata")
+
+library(tidyverse)
+library(sf)
+library(absmapsdata)
+library(grattantheme)
+
+# Now we read in the data from the website
+
+download.file(url = "https://www.abs.gov.au/AUSSTATS/subscriber.nsf/log?openagent&statistical%20area%20level%201,%20percentage%20of%20households,%20ihad%202016.xls&4198.0&Data%20Cubes&DE8CAFA6829E80E6CA2583AD00106126&0&2016&26.02.2019&Latest",destfile = "ihad-percentages-sa1.xls")
+
+data <- readxl::read_xls(path = "ihad-percentages-sa1.xls", 
+                         sheet = "Table 1", 
+                         skip = 5, 
+                         col_names = TRUE)
+
+# Now we tidy the column names 
+
+data <- data %>%
+  
+# We note that column one is the 7-digit SA1 code, which is unhelpful and will be removed
+  
+  select(-...1) %>%
+  
+# And now we give sensible names to the remaining columns
+  
+  rename(sa1_main_2016 = ...2,
+         percentage_q1 = `Quartile 1`,
+         percentage_q2 = `Quartile 2`,
+         percentage_q3 = `Quartile 3`,
+         percentage_q4 = `Quartile 4`,
+         dwellings_in_scope = ...7,
+         SEIFA_quartile = ...8,
+         population = ...9, 
+         dwellings_total = ...10)
+
+```
+
+## Combining with map data
+
+We now append this data to the `simple features` ABS map data synthesised by [Will Mackey](https://github.com/wfmackey/absmapsdata). 
+
+```{r Mapping, echo=FALSE}
+
+# We need to change the SA1 codes to be character rather than numeric
+
+data <- data %>% 
+  mutate(sa1_main_2016 = as.character(sa1_main_2016))
+
+# Now we join the IHAD data onto the mapping data and filter for our capital cities of interest
+
+ihad_sa1 <- full_join(sa12016, data, "sa1_main_2016") %>% 
+  filter(gcc_name_2016 %in% c("Greater Melbourne", "Greater Sydney"))
+
+ihad_melb <- ihad_sa1 %>% 
+  filter(gcc_name_2016 == "Greater Melbourne")
+
+ihad_syd <- ihad_sa1 %>% 
+  filter(gcc_name_2016 == "Greater Sydney")
+
+ggplot(data = ihad_melb) +
+  geom_sf(aes(geometry = geometry,
+              fill = percentage_q1),
+          lwd = 0) +
+  scale_fill_gradientn(colours = grattan_pal(6)) +
+  theme_grattan() +
+  coord_sf(datum = NA) +
+  labs(fill = "Percentage of households in the bottom IHAD quartile")
+  
+
+  
+
+
+```
+
+## Aggregating the data to SA2s or SA3s
+
+
