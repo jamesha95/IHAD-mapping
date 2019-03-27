@@ -35,6 +35,11 @@ library(tidyverse)
 library(sf)
 library(absmapsdata)
 library(grattantheme)
+library(sp)
+library(data.table)
+library(ASGS)
+library(tmap)
+library(leaflet)
 
 # Now we read in the data from the website
 
@@ -71,7 +76,7 @@ data <- data %>%
 
 We now append this data to the `simple features` ABS map data synthesised by [Will Mackey](https://github.com/wfmackey/absmapsdata). 
 
-```{r Mapping, echo=FALSE}
+```{r Joining with map data, echo=FALSE}
 
 # We need to change the SA1 codes to be character rather than numeric
 
@@ -89,6 +94,11 @@ ihad_sa1_melb <- ihad_sa1 %>%
 ihad_sa1_syd <- ihad_sa1 %>% 
   filter(gcc_name_2016 == "Greater Sydney")
 
+```
+
+We've wrangled, now let us plot!
+
+```{r Cartography 1: Plotting maps}
 map_sa1_melb <- 
   ggplot(data = ihad_sa1_melb) +
   geom_sf(aes(geometry = geometry,
@@ -132,7 +142,7 @@ The proportion of households facing disadvantage (i.e. in the lowest quartile) c
 
 ```{r Aggregating to SA2}
 
-# We need correspond the sa1 data to sa2s, then append to sa2 geometry.
+# We need to correspond the sa1 data to sa2s, then append to sa2 geometry.
 
 corresp_sa1_to_sa2 <- tibble(sa1_main_2016 = sa12016$sa1_main_2016, 
                              sa2_main_2016 = sa12016$sa2_main_2016)
@@ -166,6 +176,51 @@ ihad_sa2_melb <- ihad_agg %>%
 ihad_sa2_syd <- ihad_agg %>% 
   filter(gcc_name_2016 == "Greater Sydney",
          percentage_q1 <= 60)
+```
+
+```{r Aggregating to SA3}
+
+# We need to correspond the sa1 data to sa2s, then append to sa2 geometry.
+
+corresp_sa1_to_sa3 <- tibble(sa1_main_2016 = sa12016$sa1_main_2016, 
+                             sa3_code_2016 = sa12016$sa3_code_2016)
+
+ihad_agg_sa3 <- data %>% 
+  full_join(corresp_sa1_to_sa3, by = "sa1_main_2016") %>% 
+  mutate(n_q1 = percentage_q1*dwellings_in_scope,
+         n_q2 = percentage_q2*dwellings_in_scope,
+         n_q3 = percentage_q3*dwellings_in_scope,
+         n_q4 = percentage_q4*dwellings_in_scope) %>% 
+  group_by(sa3_code_2016) %>%
+  summarise(n_q1 = sum(n_q1, na.rm = TRUE),
+            n_q2 = sum(n_q2, na.rm = TRUE),
+            n_q3 = sum(n_q3, na.rm = TRUE),
+            n_q4 = sum(n_q4, na.rm = TRUE),
+            dwellings_in_scope = sum(dwellings_in_scope, na.rm = TRUE),
+            dwellings_total = sum(dwellings_total, na.rm = TRUE),
+            population = sum(population, na.rm = TRUE)) %>% 
+  mutate(percentage_q1 = n_q1/dwellings_in_scope,
+         approx_number_households = percentage_q1*dwellings_total/100) %>% 
+  full_join(sa32016, by = "sa3_code_2016")
+  
+#
+
+ihad_sa3_melb <- ihad_agg_sa3 %>% 
+  filter(gcc_name_2016 == "Greater Melbourne")
+
+#ihad_sa2_melb_trim <- ihad_sa2_melb %>%
+#  filter(percentage_q1 <= 60)
+
+ihad_sa3_syd <- ihad_agg_sa3 %>% 
+  filter(gcc_name_2016 == "Greater Sydney",
+         percentage_q1 <= 60)
+```
+
+Having wrangled, now we plot.
+
+```{r Cartography 2: Plotting the SA2 maps, results="show"}
+
+#I've set `results="show"` because without it, the interactive map won't print
 
 map_sa2_melb <- 
   ggplot(data = ihad_sa2_melb) +
@@ -181,7 +236,8 @@ map_sa2_melb <-
   scale_fill_gradientn(colours = grattan_pal(6)) +
   theme_grattan() +
   theme(legend.position = "right",
-        legend.direction = "vertical") +
+        legend.direction = "vertical",
+        axis.title = element_blank()) +
   coord_sf(datum = NA) +
   labs(title = "Disadvantage across Greater Melbourne", 
        subtitle = "Percentage of households in the bottom IHAD quartile",
@@ -189,10 +245,17 @@ map_sa2_melb <-
   
 map_sa2_melb
  
-library(tmap)
+
+# Re-ordering columns so that the label is the name, not the code
+ihad_sa2_melb_leaflet <- ihad_sa2_melb %>% 
+  select(sa2_name_2016, everything())
+
+# getting the tibble ready for use in tmap
+sf_sa2_melb <- st_as_sf(ihad_sa2_melb_leaflet)
+
 tmap_mode("view")
-sf_sa2_melb <- st_as_sf(ihad_sa2_melb)
-tm_shape(sf_sa2_melb) + 
+
+int_map <- tm_shape(sf_sa2_melb) + 
   tm_fill(col = "percentage_q1", 
           palette = grattan_pal(6),
           alpha = 0.5) +
@@ -201,17 +264,19 @@ tm_shape(sf_sa2_melb) +
              border.col = "white", 
              alpha = 0.5) +
   tm_borders(col = grattan_grey1, lwd = 0.5)
+
+int_map
+
+
 ```
 
 Next we'll try making a map with a dot plotted for every 50 or so households in the bottom quartile.
 
-```{r Mapping with dots}
+```{r Sampling dots within SA2s}
 
 #  Let's try plotting one dot for every 50 households
 
-library(sp)
-library(data.table)
-library(ASGS)
+
 perNhh <- 50
 pointCollector <- list()
 
@@ -229,11 +294,20 @@ for(i in ihad_sa2_melb_trim$sa2_main_2016){
   if(is.na(ihad_sa2_melb_trim$approx_number_households[ihad_sa2_melb_trim$sa2_main_2016 == i])){next()}
   npts <- floor(ihad_sa2_melb_trim$approx_number_households[ihad_sa2_melb_trim$sa2_main_2016 == i]/perNhh)
   if(npts == 0){next()}
-  pts <- data.frame(spsample(x = sa2_shape_frame, n = npts, type = "random")@coords)
+  pts <- data.frame(spsample(x = sa2_shape_frame, 
+                             n = npts, 
+                             type = "random", 
+                             iter = 10)@coords) # iter(default = 4): number of times to try to place sample points in a polygon before giving up and returning NULL - this may occur when trying to hit a small and awkwardly shaped polygon in a large bounding box with a small number of points.
   pointCollector[[i]] <- pts
 }
 
 pointFrame <- bind_rows(pointCollector, .id = "sa2_main")
+
+```
+
+And once again, we plot.
+
+```{r Cartography 3: SA2 dot maps}
 
 map_sa2_melb_dots <- ggplot(ihad_sa2_melb_trim)
 map_sa2_melb_dots <- map_sa2_melb_dots + theme_void()
@@ -258,7 +332,136 @@ map_sa2_melb_dots <- map_sa2_melb_dots + labs(title = "Disadvantage across Great
 
 map_sa2_melb_dots
 
+```
 
-  
+Next, let's try sampling the households within SA1s, but plotting onto the SA2 map. This ensures more accurate house-dot location.
+
+```{r Sampling dots from SA1s}
+
+#  Let's try plotting one dot for every 50 households 
+# (works but very concentrated dots in inner-Melb). 
+
+# Now let's try 100 
+# (too few dots, SA1s are too small...)
+
+# Okay let's go back to 50 but use a ceiling function
+# Better, but a hist of approx_number_households shows that the average number is only 38, and the distribution is extremely skewed
+
+# so let's try 10 with a `round` instead of a ceiling or floor. This could be too much
+# and yeah, it's a lot
+
+# next is to try 20
+# still a lot
+
+# we settle on 50 with a round feature (so SA1s with at least 25 households get a dot)
+
+perNhh <- 50
+pointCollector <- list()
+
+ihad_sa1_melb <- ihad_sa1_melb %>% 
+  mutate(approx_number_households = percentage_q1*dwellings_total/100)
+
+melb_sa1_sf <- SA1_2016
+temp <- SA1_2016@data %>% as.data.table()
+melb_sa1_sf@data <- temp[ , SA1_MAIN16 := SA1_MAIN16 %>% as.character()]
+melb_sa1_sf <- melb_sa1_sf[melb_sa1_sf$GCC_NAME16 == "Greater Melbourne",]
+
+for(i in ihad_sa1_melb$sa1_main_2016){
+  sa1_shape_frame <- melb_sa1_sf[melb_sa1_sf$SA1_MAIN16 == i, ]
+  if(nrow(sa1_shape_frame) < 1){  next()  }
+  if(is.na(ihad_sa1_melb$approx_number_households[ihad_sa1_melb$sa1_main_2016 == i])){next()}
+  if(ihad_sa1_melb$approx_number_households[ihad_sa1_melb$sa1_main_2016 == i] == 0){next()}
+  npts <- round(ihad_sa1_melb$approx_number_households[ihad_sa1_melb$sa1_main_2016 == i]/perNhh)
+  if(npts == 0){next()}
+  pts <- data.frame(spsample(x = sa1_shape_frame,
+                             n = npts,
+                             type = "random",
+                             iter = 10)@coords) # iter(default = 4): number of times to try to place sample points in a polygon before giving up and returning NULL - this may occur when trying to hit a small and awkwardly shaped polygon in a large bounding box with a small number of points.
+  pointCollector[[i]] <- pts
+}
+
+pointFrameSA1 <- bind_rows(pointCollector, .id = "sa1_main")
+
+dim(pointFrameSA1) # just a check
+head(pointFrameSA1)
+
+```
+Once more unto the `plotting` breach!
+
+```{r Cartography 4: SA1 dots on an SA2 map}
+
+# 
+
+map_sa2_melb_dots <- ggplot(ihad_sa2_melb)
+map_sa2_melb_dots <- map_sa2_melb_dots + theme_void()
+map_sa2_melb_dots <- map_sa2_melb_dots + geom_sf(aes(geometry = geometry, 
+                                                     fill = percentage_q1),
+                                                 lwd = 0)
+map_sa2_melb_dots <- map_sa2_melb_dots + scale_fill_gradientn(colours = grattan_pal(6))
+map_sa2_melb_dots <- map_sa2_melb_dots + geom_point(data = pointFrameSA1,
+                                                    aes(x = x, y = y),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+# I don't know why, but some sampled dots have coordinates (x,y) and some have coords (coords.x1, coords.x2). I should investigate and fix, but for now I'll just plot both.
+map_sa2_melb_dots <- map_sa2_melb_dots + geom_point(data = pointFrameSA1,
+                                                    aes(x = coords.x1, y = coords.x2),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+map_sa2_melb_dots <- map_sa2_melb_dots + theme(legend.position = "right", 
+                                               legend.direction = "vertical",
+                                               legend.text = element_text(size = 12),
+                                               axis.title = element_blank())
+map_sa2_melb_dots <- map_sa2_melb_dots + coord_sf(datum = NA)
+map_sa2_melb_dots <- map_sa2_melb_dots + labs(title = "Disadvantage across Greater Melbourne", 
+                                              subtitle = "Percentage of households in the bottom IHAD quartile",
+                                              fill = "Percentage",
+                                              shape = "50 households")
+
+map_sa2_melb_dots 
+
+```
+
+Now we're getting fancy. We're simulating dots for groups of households at the SA1 level to ensure locational accuracy, but plotting them onto SA3s so that we can see the underlying colour better.
+
+```{r Cartography 4: SA1 dots on an SA3 map}
+
+# 
+
+map_melb_sa3_dots_sa1 <- ggplot(ihad_sa3_melb)
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + theme_void()
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + geom_sf(aes(geometry = geometry, 
+                                                     fill = percentage_q1),
+                                                 lwd = 0)
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + scale_fill_gradientn(colours = grattan_pal(6))
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + geom_point(data = pointFrameSA1,
+                                                    aes(x = x, y = y),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+# I don't know why, but some sampled dots have coordinates (x,y) and some have coords (coords.x1, coords.x2). I should investigate and fix, but for now I'll just plot both.
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + geom_point(data = pointFrameSA1,
+                                                    aes(x = coords.x1, y = coords.x2),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + theme(legend.position = "right", 
+                                               legend.direction = "vertical",
+                                               legend.text = element_text(size = 12),
+                                               axis.title = element_blank(),
+                                               plot.title = element_text(hjust = 0.5), 
+                                               plot.subtitle = element_text(hjust = 0.5),
+                                               plot.caption = element_text(hjust = 0.5)
+                                               )
+                                              
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + coord_sf(datum = NA)
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + labs(title = "Disadvantage across Greater Melbourne", 
+                                              subtitle = "Percentage of households in the bottom IHAD quartile",
+                                              fill = "Percentage",
+                                              caption = "Each dot represents 50 households")
+
+map_melb_sa3_dots_sa1
+
 ```
 
