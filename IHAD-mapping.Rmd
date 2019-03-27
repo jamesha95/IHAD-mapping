@@ -158,8 +158,10 @@ ihad_agg <- data %>%
 # One SA2 is a clear outlier - Braeside in Melbourne (100%). It has a low sample size, about 11 households. We exclude those SA2s with more than 60% of households in the bottom quartile.
 
 ihad_sa2_melb <- ihad_agg %>% 
-  filter(gcc_name_2016 == "Greater Melbourne",
-         percentage_q1 <= 60)
+  filter(gcc_name_2016 == "Greater Melbourne")
+
+#ihad_sa2_melb_trim <- ihad_sa2_melb %>%
+#  filter(percentage_q1 <= 60)
 
 ihad_sa2_syd <- ihad_agg %>% 
   filter(gcc_name_2016 == "Greater Sydney",
@@ -199,7 +201,64 @@ tm_shape(sf_sa2_melb) +
              border.col = "white", 
              alpha = 0.5) +
   tm_borders(col = grattan_grey1, lwd = 0.5)
- 
+```
+
+Next we'll try making a map with a dot plotted for every 50 or so households in the bottom quartile.
+
+```{r Mapping with dots}
+
+#  Let's try plotting one dot for every 50 households
+
+library(sp)
+library(data.table)
+library(ASGS)
+perNhh <- 50
+pointCollector <- list()
+
+ihad_sa2_melb_trim <- ihad_sa2_melb %>%
+  filter(percentage_q1 <= 60)
+
+melb_sf <- SA2_2016
+temp <- SA2_2016@data %>% as.data.table()
+melb_sf@data <- temp[ , SA2_MAIN16 := SA2_MAIN16 %>% as.character()]
+melb_sf <- melb_sf[melb_sf$GCC_NAME16 == "Greater Melbourne",]
+
+for(i in ihad_sa2_melb_trim$sa2_main_2016){
+  sa2_shape_frame <- melb_sf[melb_sf$SA2_MAIN16 == i, ]
+  if(nrow(sa2_shape_frame) < 1){  next()  }
+  if(is.na(ihad_sa2_melb_trim$approx_number_households[ihad_sa2_melb_trim$sa2_main_2016 == i])){next()}
+  npts <- floor(ihad_sa2_melb_trim$approx_number_households[ihad_sa2_melb_trim$sa2_main_2016 == i]/perNhh)
+  if(npts == 0){next()}
+  pts <- data.frame(spsample(x = sa2_shape_frame, n = npts, type = "random")@coords)
+  pointCollector[[i]] <- pts
+}
+
+pointFrame <- bind_rows(pointCollector, .id = "sa2_main")
+
+map_sa2_melb_dots <- ggplot(ihad_sa2_melb_trim)
+map_sa2_melb_dots <- map_sa2_melb_dots + theme_void()
+map_sa2_melb_dots <- map_sa2_melb_dots + geom_sf(aes(geometry = geometry, 
+                                                     fill = percentage_q1),
+                                                 lwd = 0)
+map_sa2_melb_dots <- map_sa2_melb_dots + scale_fill_gradientn(colours = grattan_pal(6))
+map_sa2_melb_dots <- map_sa2_melb_dots + geom_point(data = pointFrame,
+                                                    aes(x = x, y = y),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+map_sa2_melb_dots <- map_sa2_melb_dots + theme(legend.position = "right", 
+                                               legend.direction = "vertical",
+                                               legend.text = element_text(size = 12),
+                                               axis.title = element_blank())
+map_sa2_melb_dots <- map_sa2_melb_dots + coord_sf(datum = NA)
+map_sa2_melb_dots <- map_sa2_melb_dots + labs(title = "Disadvantage across Greater Melbourne", 
+                                              subtitle = "Percentage of households in the bottom IHAD quartile",
+                                              fill = "Percentage",
+                                              shape = "50 households")
+
+map_sa2_melb_dots
+
+
   
 ```
 
