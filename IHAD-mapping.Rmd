@@ -149,10 +149,10 @@ corresp_sa1_to_sa2 <- tibble(sa1_main_2016 = sa12016$sa1_main_2016,
 
 ihad_agg <- data %>% 
   full_join(corresp_sa1_to_sa2, by = "sa1_main_2016") %>% 
-  mutate(n_q1 = percentage_q1*dwellings_in_scope,
-         n_q2 = percentage_q2*dwellings_in_scope,
-         n_q3 = percentage_q3*dwellings_in_scope,
-         n_q4 = percentage_q4*dwellings_in_scope) %>% 
+  mutate(n_q1 = percentage_q1*dwellings_in_scope/100,
+         n_q2 = percentage_q2*dwellings_in_scope/100,
+         n_q3 = percentage_q3*dwellings_in_scope/100,
+         n_q4 = percentage_q4*dwellings_in_scope/100) %>% 
   group_by(sa2_main_2016) %>%
   summarise(n_q1 = sum(n_q1, na.rm = TRUE),
             n_q2 = sum(n_q2, na.rm = TRUE),
@@ -161,7 +161,7 @@ ihad_agg <- data %>%
             dwellings_in_scope = sum(dwellings_in_scope, na.rm = TRUE),
             dwellings_total = sum(dwellings_total, na.rm = TRUE),
             population = sum(population, na.rm = TRUE)) %>% 
-  mutate(percentage_q1 = n_q1/dwellings_in_scope,
+  mutate(percentage_q1 = 100*n_q1/dwellings_in_scope,
          approx_number_households = percentage_q1*dwellings_total/100) %>% 
   full_join(sa22016, by = "sa2_main_2016")
   
@@ -459,9 +459,48 @@ map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + coord_sf(datum = NA)
 map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + labs(title = "Disadvantage across Greater Melbourne", 
                                               subtitle = "Percentage of households in the bottom IHAD quartile",
                                               fill = "Percentage",
-                                              caption = "Each dot represents 50 households")
+                                              caption = "Each dot represents 50 households.\nBased on Grattan Institute analysis of ABS data.")
 
 map_melb_sa3_dots_sa1
 
+# grattan_save("Melbourne_Disadvantaged_Households.png", 
+#              object = map_melb_sa3_dots_sa1,
+#              type = "fullslide")
+
+```
+
+And lastly, I want to build an interactive version of the above map, with roads visible.
+
+We may also want to do some spatial analysis, such as distance from nearest school or an overlap of the congestion scheme region and the number of disadvantaged households.
+
+```{r Interactive maps and other spatial analyses, results="show"}
+
+# Removing the SA2s with few households (such as Braeside) and getting the file ready for tmap
+sf_sa2_melb_trim <- ihad_sa2_melb %>% 
+  select(sa2_name_2016, everything()) %>% 
+  mutate(percentage_q1 = ifelse(dwellings_total >= 100, percentage_q1, NA)) %>% 
+  st_as_sf()
+
+
+points_to_plot <- pointFrameSA1 %>% 
+  mutate(x = ifelse(is.na(x), coords.x1, x),
+         y = ifelse(is.na(y), coords.x2, y)) %>% 
+  select(-c(coords.x1, coords.x2)) %>% 
+   st_as_sf(coords = c('x', 'y'))
+
+tmap_mode("view")
+
+int_map_sa1 <- tm_shape(sf_sa2_melb_trim) + 
+  tm_fill(col = "percentage_q1", 
+          palette = grattan_pal(6),
+          alpha = 0.5) +
+  tm_borders(col = grattan_grey1, lwd = 0.5) +
+  
+  tm_shape(points_to_plot) +
+  tm_dots(col = "black",
+          size = 0.01,
+          shape = 16)
+
+int_map_sa1
 ```
 
