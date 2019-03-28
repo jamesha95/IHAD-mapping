@@ -478,9 +478,17 @@ We may also want to do some spatial analysis, such as distance from nearest scho
 # Removing the SA2s with few households (such as Braeside) and getting the file ready for tmap
 sf_sa2_melb_trim <- ihad_sa2_melb %>% 
   select(sa2_name_2016, everything()) %>% 
-  mutate(percentage_q1 = ifelse(dwellings_total >= 100, percentage_q1, NA)) %>% 
+  mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
+         approx_number_disadvantaged_households = round(approx_number_households),
+         note = "One dot represents 50 households in the bottom quartile.") %>% 
   st_as_sf()
 
+# and let's add an SA1 map below too.
+
+sf_sa1_melb <- ihad_sa1_melb %>% 
+  st_as_sf()
+
+# now we convert the household locations into longitude and latitude
 
 points_to_plot <- pointFrameSA1 %>% 
   mutate(x = ifelse(is.na(x), coords.x1, x),
@@ -488,19 +496,30 @@ points_to_plot <- pointFrameSA1 %>%
   select(-c(coords.x1, coords.x2)) %>% 
    st_as_sf(coords = c('x', 'y'))
 
+# and we plot!
+
 tmap_mode("view")
 
 int_map_sa1 <- tm_shape(sf_sa2_melb_trim) + 
-  tm_fill(col = "percentage_q1", 
+  tm_fill(col = "percentage_of_bottom_quartile_households", 
           palette = grattan_pal(6),
-          alpha = 0.5) +
+          alpha = 0.5,
+          popup.vars = c("sa2_name_2016", "sa3_name_2016", "percentage_of_bottom_quartile_households", "approx_number_disadvantaged_households", "note")) +
   tm_borders(col = grattan_grey1, lwd = 0.5) +
+  
+  tm_shape(sf_sa1_melb) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower. 
+  tm_borders(col = "red") +
   
   tm_shape(points_to_plot) +
   tm_dots(col = "black",
-          size = 0.01,
-          shape = 16)
+          size = 0.0001, #set to 0.1 or 0.01 if you turn on dot.size.fixed 
+          shape = 16) +  #picks black circles
+  tm_credits("Each dot represents 50 households in the bottom IHAD quartile.\nBased on Grattan Institute analysis of ABS data.", position = c("centre", "bottom"), align = "centre") +
+  tm_view(dot.size.fixed = FALSE) # prevents dots from scaling as you zoom
 
 int_map_sa1
+
+ tmap_save(tm = int_map_sa1, filename = "Interactive_map_of_disadvantage_in_Melbourne.html")
+
 ```
 
