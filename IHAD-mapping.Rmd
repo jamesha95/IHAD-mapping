@@ -2,7 +2,7 @@
 title: "Mapping the ABS experimental Index of Household Advantage and Disadvantage (IHAD)"
 output: 
   html_document:
-    code_folding: show
+    code_folding: hide
 ---
 https://github.com/jamesha95/IHAD-mapping.git
 ```{r setup, include=FALSE}
@@ -41,6 +41,7 @@ library(ASGS)
 library(tmap)
 library(leaflet)
 library(data.table)
+library(magrittr)
 
 # Now we read in the data from the website
 
@@ -100,9 +101,9 @@ ihad_sa1_bris <- ihad_sa1 %>%
 
 ```
 
-We've wrangled, now let us plot!
+We've wrangled, now let us plot! (Note that SA1s are actually very small, making this map somewhat unhelpful. Skipping over it...)
 
-```{r Cartography 1: Plotting maps}
+```{r Cartography 1: Plotting maps, eval = FALSE}
 map_sa1_melb <- 
   ggplot(data = ihad_sa1_melb) +
   geom_sf(aes(geometry = geometry,
@@ -132,7 +133,7 @@ map_sa1_syd <-
        fill = "Percentage")  
 
 map_sa1_melb
-map_sa1_syd
+# map_sa1_syd
   
 
 
@@ -166,7 +167,13 @@ ihad_agg <- data %>%
             dwellings_total = sum(dwellings_total, na.rm = TRUE),
             population = sum(population, na.rm = TRUE)) %>% 
   mutate(percentage_q1 = 100*n_q1/dwellings_in_scope,
-         approx_number_households = percentage_q1*dwellings_total/100) %>% 
+         percentage_q2 = 100*n_q2/dwellings_in_scope,
+         percentage_q3 = 100*n_q3/dwellings_in_scope,
+         percentage_q4 = 100*n_q4/dwellings_in_scope,
+         approx_number_q1_households = round(percentage_q1*dwellings_total/100),
+         approx_number_q2_households = round(percentage_q2*dwellings_total/100),
+         approx_number_q3_households = round(percentage_q3*dwellings_total/100),
+         approx_number_q4_households = round(percentage_q4*dwellings_total/100)) %>% 
   full_join(sa22016, by = "sa2_main_2016")
   
 # One SA2 is a clear outlier - Braeside in Melbourne (100%). It has a low sample size, about 11 households. We exclude those SA2s with more than 60% of households in the bottom quartile.
@@ -191,6 +198,8 @@ ihad_sa2_bris_trim <- ihad_sa2_bris %>%
 
 ```
 
+And aggregating to SA3s now:
+
 ```{r Aggregating to SA3}
 
 # We need to correspond the sa1 data to sa2s, then append to sa2 geometry.
@@ -200,10 +209,10 @@ corresp_sa1_to_sa3 <- tibble(sa1_main_2016 = sa12016$sa1_main_2016,
 
 ihad_agg_sa3 <- data %>% 
   full_join(corresp_sa1_to_sa3, by = "sa1_main_2016") %>% 
-  mutate(n_q1 = percentage_q1*dwellings_in_scope,
-         n_q2 = percentage_q2*dwellings_in_scope,
-         n_q3 = percentage_q3*dwellings_in_scope,
-         n_q4 = percentage_q4*dwellings_in_scope) %>% 
+  mutate(n_q1 = percentage_q1*dwellings_in_scope/100,
+         n_q2 = percentage_q2*dwellings_in_scope/100,
+         n_q3 = percentage_q3*dwellings_in_scope/100,
+         n_q4 = percentage_q4*dwellings_in_scope/100) %>% 
   group_by(sa3_code_2016) %>%
   summarise(n_q1 = sum(n_q1, na.rm = TRUE),
             n_q2 = sum(n_q2, na.rm = TRUE),
@@ -212,8 +221,15 @@ ihad_agg_sa3 <- data %>%
             dwellings_in_scope = sum(dwellings_in_scope, na.rm = TRUE),
             dwellings_total = sum(dwellings_total, na.rm = TRUE),
             population = sum(population, na.rm = TRUE)) %>% 
-  mutate(percentage_q1 = n_q1/dwellings_in_scope,
-         approx_number_households = percentage_q1*dwellings_total/100) %>% 
+  mutate(percentage_q1 = n_q1/dwellings_in_scope*100,
+         percentage_q2 = n_q2/dwellings_in_scope*100,
+         percentage_q3 = n_q3/dwellings_in_scope*100,
+         percentage_q4 = n_q4/dwellings_in_scope*100,
+         approx_number_q1_households = round(percentage_q1*dwellings_total/100),
+         approx_number_q2_households = round(percentage_q2*dwellings_total/100),
+         approx_number_q3_households = round(percentage_q3*dwellings_total/100),
+         approx_number_q4_households = round(percentage_q4*dwellings_total/100)
+         ) %>% 
   full_join(sa32016, by = "sa3_code_2016")
   
 #
@@ -228,7 +244,7 @@ ihad_sa3_bris <- ihad_agg_sa3 %>%
   filter(gcc_name_2016 == "Greater Brisbane")
 ```
 
-Having wrangled, now we plot.
+Having wrangled, now we plot. Note that outlying SA2s have really ruined our scale.
 
 ```{r Cartography 2: Plotting the SA2 maps, results="show"}
 
@@ -241,7 +257,7 @@ map_sa2_melb <-
           lwd = 0) +
   geom_point(aes(x = cent_lat,
                  y = cent_long,
-                 size = approx_number_households),
+                 size = approx_number_q1_households),
              colour = "black",
              alpha = 0.5) +
   scale_size(range = c(0.1, 1)) +
@@ -250,7 +266,7 @@ map_sa2_melb <-
   theme(legend.position = "right",
         legend.direction = "vertical",
         axis.title = element_blank()) +
-  coord_sf(datum = NA) +
+  coord_sf(datum = NA, crs = "+init=epsg:4238") +
   labs(title = "Disadvantage across Greater Melbourne", 
        subtitle = "Percentage of households in the bottom IHAD quartile",
        fill = "Percentage")
@@ -271,7 +287,7 @@ int_map <- tm_shape(sf_sa2_melb) +
   tm_fill(col = "percentage_q1", 
           palette = grattan_pal(6),
           alpha = 0.5) +
-  tm_bubbles(size = "approx_number_households", 
+  tm_bubbles(size = "approx_number_q1_households", 
              col = "black", 
              border.col = "white", 
              alpha = 0.5) +
@@ -293,8 +309,11 @@ Next we'll try making a map with a dot plotted for every 50 or so households in 
 perNhh <- 50
 pointCollector <- list()
 
+# Now let's remove pesky low-sample SA2s by deleting their percentage value for the bottom quartile. This will still 
+# allow us to plot them, but their fill can be set to grey. 
+
 ihad_sa2_melb_trim <- ihad_sa2_melb %>%
-  filter(percentage_q1 <= 60)
+  mutate(percentage_q1 = ifelse(dwellings_total >= 100, percentage_q1, NA))
 
 melb_sf <- SA2_2016
 temp <- SA2_2016@data %>% as.data.table()
@@ -304,8 +323,9 @@ melb_sf <- melb_sf[melb_sf$GCC_NAME16 == "Greater Melbourne",]
 for(i in ihad_sa2_melb_trim$sa2_main_2016){
   sa2_shape_frame <- melb_sf[melb_sf$SA2_MAIN16 == i, ]
   if(nrow(sa2_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa2_melb_trim$approx_number_households[ihad_sa2_melb_trim$sa2_main_2016 == i])){next()}
-  npts <- floor(ihad_sa2_melb_trim$approx_number_households[ihad_sa2_melb_trim$sa2_main_2016 == i]/perNhh)
+  
+  npts <- floor(ihad_sa2_melb_trim$approx_number_q1_households[ihad_sa2_melb_trim$sa2_main_2016 == i]/perNhh)
+  if(is.na(npts)){next()}
   if(npts == 0){next()}
   pts <- data.frame(spsample(x = sa2_shape_frame, 
                              n = npts, 
@@ -337,7 +357,7 @@ map_sa2_melb_dots <- map_sa2_melb_dots + theme(legend.position = "right",
                                                legend.direction = "vertical",
                                                legend.text = element_text(size = 12),
                                                axis.title = element_blank())
-map_sa2_melb_dots <- map_sa2_melb_dots + coord_sf(datum = NA)
+map_sa2_melb_dots <- map_sa2_melb_dots + coord_sf(datum = NA, crs = "+init=epsg:4238")
 map_sa2_melb_dots <- map_sa2_melb_dots + labs(title = "Disadvantage across Greater Melbourne", 
                                               subtitle = "Percentage of households in the bottom IHAD quartile",
                                               fill = "Percentage",
@@ -347,7 +367,7 @@ map_sa2_melb_dots
 
 ```
 
-Next, let's try sampling the households within SA1s, but plotting onto the SA2 map. This ensures more accurate house-dot location.
+Now we're talking! This is much more informative. Next, let's try sampling the households within SA1s, but plotting onto the SA2 map. This ensures more accurate house-dot location.
 
 ```{r Sampling dots from SA1s}
 
@@ -399,8 +419,11 @@ for(i in ihad_sa1_melb$sa1_main_2016){
 
 pointFrameSA1melb <- bind_rows(pointCollector, .id = "sa1_main")
 pointCollector <- list() # cleaning up after oneself
-dim(pointFrameSA1melb) # just a check
-head(pointFrameSA1melb)
+dim(pointFrameSA1melb) # just some checks
+approx_total_q1_households <- ihad_sa1_melb$approx_number_q1_households %>% sum(na.rm = TRUE) %>% divide_by(perNhh)
+percent_covered_by_dots <- dim(pointFrameSA1melb)[1]/approx_total_q1_households
+percent_covered_by_dots
+#head(pointFrameSA1melb)
 
 # --- Sydney ---
 
@@ -420,8 +443,11 @@ for(i in ihad_sa1_syd$sa1_main_2016){
 
 pointFrameSA1syd <- bind_rows(pointCollector, .id = "sa1_main")
 pointCollector <- list() # cleaning up after oneself
-dim(pointFrameSA1syd) # just a check
-head(pointFrameSA1syd)
+dim(pointFrameSA1syd) # just some checks
+approx_total_q1_households <- ihad_sa1_syd$approx_number_q1_households %>% sum(na.rm = TRUE) %>% divide_by(perNhh)
+percent_covered_by_dots <- dim(pointFrameSA1syd)[1]/approx_total_q1_households
+percent_covered_by_dots # this tells us whether our choice to simulate from sa1s with >24 households has led to many homes being ignored. But it's not too bad, >90% are represented. 
+#head(pointFrameSA1syd)
 
 # --- Brisbane ---
 
@@ -441,17 +467,25 @@ for(i in ihad_sa1_bris$sa1_main_2016){
 
 pointFrameSA1bris <- bind_rows(pointCollector, .id = "sa1_main")
 pointCollector <- list() # cleaning up after oneself
-dim(pointFrameSA1bris) # just a check
-head(pointFrameSA1bris)
+dim(pointFrameSA1bris) # just some checks
+approx_total_q1_households <- ihad_sa1_bris$approx_number_q1_households %>% sum(na.rm = TRUE) %>% divide_by(perNhh)
+percent_covered_by_dots <- dim(pointFrameSA1bris)[1]/approx_total_q1_households
+percent_covered_by_dots
+#head(pointFrameSA1bris)
 
 ```
-Once more unto the `plotting` breach!
+The computation time was quite a bit longer for these simulations. 
+
+
+Now let's plot Melbourne.
+
+
 
 ```{r Cartography 4: Plotting SA1 dots on a static SA2 map}
 
 # 
 
-map_sa2_melb_dots <- ggplot(ihad_sa2_melb)
+map_sa2_melb_dots <- ggplot(ihad_sa2_melb_trim)
 map_sa2_melb_dots <- map_sa2_melb_dots + theme_void()
 map_sa2_melb_dots <- map_sa2_melb_dots + geom_sf(aes(geometry = geometry, 
                                                      fill = percentage_q1),
@@ -472,7 +506,7 @@ map_sa2_melb_dots <- map_sa2_melb_dots + theme(legend.position = "right",
                                                legend.direction = "vertical",
                                                legend.text = element_text(size = 12),
                                                axis.title = element_blank())
-map_sa2_melb_dots <- map_sa2_melb_dots + coord_sf(datum = NA)
+map_sa2_melb_dots <- map_sa2_melb_dots + coord_sf(datum = NA, crs = "+init=epsg:4238")
 map_sa2_melb_dots <- map_sa2_melb_dots + labs(title = "Disadvantage across Greater Melbourne", 
                                               subtitle = "Percentage of households in the bottom IHAD quartile",
                                               fill = "Percentage",
@@ -481,6 +515,7 @@ map_sa2_melb_dots <- map_sa2_melb_dots + labs(title = "Disadvantage across Great
 map_sa2_melb_dots 
 
 ```
+Nice; the actual plotting was very quick using ggplot. 
 
 Now we're getting fancy. We're simulating dots for groups of households at the SA1 level to ensure locational accuracy, but plotting them onto SA3s so that we can see the underlying colour better.
 
@@ -514,7 +549,7 @@ map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + theme(legend.position = "right"
                                                plot.caption = element_text(hjust = 0.5)
                                                )
                                               
-map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + coord_sf(datum = NA)
+map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + coord_sf(datum = NA, crs = "+init=epsg:4238")
 map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + labs(title = "Disadvantage across Greater Melbourne", 
                                               subtitle = "Percentage of households in the bottom IHAD quartile",
                                               fill = "Percentage",
@@ -538,7 +573,7 @@ We may also want to do some spatial analysis, such as distance from nearest scho
 sf_sa2_melb_trim <- ihad_sa2_melb %>% 
   select(sa2_name_2016, everything()) %>% 
   mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
-         approx_number_disadvantaged_households = round(approx_number_households),
+         approx_number_disadvantaged_households = round(approx_number_q1_households),
          note = "One dot represents 50 households in the bottom quartile.") %>% 
   st_as_sf()
 
@@ -566,7 +601,7 @@ int_map_sa1_melb <- tm_shape(sf_sa2_melb_trim) +
           popup.vars = c("sa2_name_2016", "sa3_name_2016", "percentage_of_bottom_quartile_households", "approx_number_disadvantaged_households", "note")) +
   tm_borders(col = grattan_grey1, lwd = 0.5) +
   
-  tm_shape(sf_sa1_melb) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower. 
+  tm_shape(sf_sa1_melb) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower...
   tm_borders(col = "red") +
   
   tm_shape(points_to_plot_melb) +
@@ -578,17 +613,18 @@ int_map_sa1_melb <- tm_shape(sf_sa2_melb_trim) +
 
 int_map_sa1_melb
 
- tmap_save(tm = int_map_sa1_melb, filename = "Interactive_map_of_disadvantage_in_Melbourne.html")
+tmap_save(tm = int_map_sa1_melb, filename = "Interactive_SA1_map_of_disadvantage_in_Melbourne.html")
+
 
 ```
 
-```{r Interactive map of Sydney, results="show"}
+```{r Interactive map of Sydney}
 
-# Removing the SA2s with few households (such as Braeside) and getting the file ready for tmap
+# Removing the SA2s with few households and getting the file ready for tmap
 sf_sa2_syd_trim <- ihad_sa2_syd %>% 
   select(sa2_name_2016, everything()) %>% 
   mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
-         approx_number_disadvantaged_households = round(approx_number_households),
+         approx_number_disadvantaged_households = round(approx_number_q1_households),
          note = "One dot represents 50 households in the bottom quartile.") %>% 
   st_as_sf()
 
@@ -628,17 +664,17 @@ int_map_sa1_syd <- tm_shape(sf_sa2_syd_trim) +
 
 int_map_sa1_syd
 
- tmap_save(tm = int_map_sa1_syd, filename = "Interactive_map_of_disadvantage_in_Sydney.html")
+ tmap_save(tm = int_map_sa1_syd, filename = "Interactive_SA1_map_of_disadvantage_in_Sydney.html")
 
 ```
 
-```{r Interactive map of Brisbane, results="show"}
+```{r Interactive map of Brisbane}
 
 # Removing the SA2s with few households (such as Braeside) and getting the file ready for tmap
 sf_sa2_bris_trim <- ihad_sa2_bris %>% 
   select(sa2_name_2016, everything()) %>% 
   mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
-         approx_number_disadvantaged_households = round(approx_number_households),
+         approx_number_disadvantaged_households = round(approx_number_q1_households),
          note = "One dot represents 50 households in the bottom quartile.") %>% 
   st_as_sf()
 
@@ -678,148 +714,156 @@ int_map_sa1_bris <- tm_shape(sf_sa2_bris_trim) +
 
 int_map_sa1_bris
 
- tmap_save(tm = int_map_sa1_bris, filename = "Interactive_map_of_disadvantage_in_Brisbane.html")
+ tmap_save(tm = int_map_sa1_bris, filename = "Interactive_SA1_map_of_disadvantage_in_Brisbane.html")
 
 ```
 
 ## Mapping advantage and disadvantage across capital cities
 
-```{r Simulating households from all quartiles, nationally}
+
+So we tried to simulate households at the SA1 level across Australia, and it was not productive. The output files were around 100MB and too laggy to use. 
+
+We then tried simulating at the SA3 level, with one dot per 100 households. The files were still ~30MB and laggy, and the location of households was not accurate, especially in the outback. 
+
+
+
+
+
+
+
+
+```{r Simulating households from all quartiles nationally, eval = FALSE}
 
 
 # 20 is wayyyyy to many, it makes the file ~100MB for all of Australia.
 # Even 50 crashed it; the simulation took 20mins, and then we got an error saying that the file couldn't be opened...
+# We should abandon simulation at the SA1 level, and maybe try simulating 100 households at the SA3 level if we really want a national map.
 
-perNhh <- 50
+perNhh <- 100
 pointCollector <- list()
 
 # Create one national shapefile
-sa1_sf <- SA1_2016
-temp <- SA1_2016@data %>% as.data.table()
-sa1_sf@data <- temp[ , SA1_MAIN16 := SA1_MAIN16 %>% as.character()]
-sa1_sf <- sa1_sf[sa1_sf$AREASQKM16 > 10^-4, ] # remove those pesky SA1s with zero area (like migratory - offshore or no usual address)
+sa3_sf <- SA3_2016
+temp <- SA3_2016@data %>% as.data.table()
+sa3_sf@data <- temp[ , SA3_CODE16 := SA3_CODE16 %>% as.character()]
+sa3_sf <- sa3_sf[sa3_sf$AREASQKM16 > 10^-4, ] # remove those pesky SA1s with zero area (like migratory - offshore or no usual address)
 
 
 # Let's try to simulate the whole country at once and see if it works. 
 # okay so the whole country fails to converge even with iter = 100. Let's restrict it to just the capital cities.
 
-ihad_sa1 <- ihad_sa1 %>%
-  mutate(approx_number_q2_households = round(dwellings_total*percentage_q2/100),
-         approx_number_q3_households = round(dwellings_total*percentage_q3/100),
-         approx_number_q4_households = round(dwellings_total*percentage_q4/100)) %>% 
+ihad_agg_sa3 <- ihad_agg_sa3 %>%
   filter(areasqkm_2016 > 10^-4)
 
-for(i in ihad_sa1$sa1_main_2016){
-  sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
-  if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1$approx_number_q1_households[ihad_sa1$sa1_main_2016 == i])){next()}
-  if(ihad_sa1$approx_number_q1_households[ihad_sa1$sa1_main_2016 == i] == 0){next()}
-  npts_q1 <- round(ihad_sa1$approx_number_q1_households[ihad_sa1$sa1_main_2016 == i]/perNhh)
+for(i in ihad_agg_sa3$sa3_code_2016){
+  sa3_shape_frame <- sa3_sf[sa3_sf$SA3_CODE16 == i, ]
+  if(nrow(sa3_shape_frame) < 1){  next()  }
+  npts_q1 <- round(ihad_agg_sa3$approx_number_q1_households[ihad_agg_sa3$sa3_code_2016 == i]/perNhh)
+  if(is.na(npts_q1)){next()} 
   if(npts_q1 == 0){next()}
-  pts_q1 <- data.frame(spsample(x = sa1_shape_frame,
+  
+  pts_q1 <- data.frame(spsample(x = sa3_shape_frame,
                              n = npts_q1,
                              type = "random",
-                             iter = 10)@coords) 
+                             iter = 1000)@coords) 
   pointCollector[[i]] <- pts_q1
 }
-pointFrameq1 <- bind_rows(pointCollector, .id = "sa1_main") %>% 
+pointFrameq1 <- bind_rows(pointCollector, .id = "sa3_code") %>% 
   mutate(IHAD_quartile = as.factor(1))
 pointCollector <- list() # cleaning up after oneself
 
-for(i in ihad_sa1$sa1_main_2016){
-  sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
-  if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1$approx_number_q2_households[ihad_sa1$sa1_main_2016 == i])){next()}
-  if(ihad_sa1$approx_number_q2_households[ihad_sa1$sa1_main_2016 == i] == 0){next()}
-  npts_q2 <- round(ihad_sa1$approx_number_q2_households[ihad_sa1$sa1_main_2016 == i]/perNhh)
+for(i in ihad_agg_sa3$sa3_code_2016){
+  sa3_shape_frame <- sa3_sf[sa3_sf$SA3_CODE16 == i, ]
+  if(nrow(sa3_shape_frame) < 1){  next()  }
+  npts_q2 <- round(ihad_agg_sa3$approx_number_q2_households[ihad_agg_sa3$sa3_code_2016 == i]/perNhh)
+  if(is.na(npts_q2)){next()} 
   if(npts_q2 == 0){next()}
-  pts_q2 <- data.frame(spsample(x = sa1_shape_frame,
+  pts_q2 <- data.frame(spsample(x = sa3_shape_frame,
                              n = npts_q2,
                              type = "random",
-                             iter = 10)@coords) 
+                             iter = 1000)@coords) 
   pointCollector[[i]] <- pts_q2
 }
-pointFrameq2 <- bind_rows(pointCollector, .id = "sa1_main")%>% 
+pointFrameq2 <- bind_rows(pointCollector, .id = "sa3_code")%>% 
   mutate(IHAD_quartile = as.factor(2))
 pointCollector <- list() # cleaning up after oneself
 
-for(i in ihad_sa1$sa1_main_2016){
-  sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
-  if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1$approx_number_q3_households[ihad_sa1$sa1_main_2016 == i])){next()}
-  if(ihad_sa1$approx_number_q3_households[ihad_sa1$sa1_main_2016 == i] == 0){next()}
-  npts_q3 <- round(ihad_sa1$approx_number_q3_households[ihad_sa1$sa1_main_2016 == i]/perNhh)
+for(i in ihad_agg_sa3$sa3_code_2016){
+  sa3_shape_frame <- sa3_sf[sa3_sf$SA3_CODE16 == i, ]
+  if(nrow(sa3_shape_frame) < 1){  next()  }
+  npts_q3 <- round(ihad_agg_sa3$approx_number_q3_households[ihad_agg_sa3$sa3_code_2016 == i]/perNhh)
+  if(is.na(npts_q3)){next()} 
   if(npts_q3 == 0){next()}
-  pts_q3 <- data.frame(spsample(x = sa1_shape_frame,
+  pts_q3 <- data.frame(spsample(x = sa3_shape_frame,
                              n = npts_q3,
                              type = "random",
-                             iter = 10)@coords) 
+                             iter = 1000)@coords) 
   pointCollector[[i]] <- pts_q3
 }
-pointFrameq3 <- bind_rows(pointCollector, .id = "sa1_main") %>% 
+pointFrameq3 <- bind_rows(pointCollector, .id = "sa3_code") %>% 
   mutate(IHAD_quartile = as.factor(3))
 pointCollector <- list() # cleaning up after oneself
 
-for(i in ihad_sa1$sa1_main_2016){
-  sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
-  if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1$approx_number_q4_households[ihad_sa1$sa1_main_2016 == i])){next()}
-  if(ihad_sa1$approx_number_q4_households[ihad_sa1$sa1_main_2016 == i] == 0){next()}
-  npts_q4 <- round(ihad_sa1$approx_number_q4_households[ihad_sa1$sa1_main_2016 == i]/perNhh)
+for(i in ihad_agg_sa3$sa3_code_2016){
+  sa3_shape_frame <- sa3_sf[sa3_sf$SA3_CODE16 == i, ]
+  if(nrow(sa3_shape_frame) < 1){  next()  }
+  npts_q4 <- round(ihad_agg_sa3$approx_number_q4_households[ihad_agg_sa3$sa3_code_2016 == i]/perNhh)
+  if(is.na(npts_q4)){next()} 
   if(npts_q4 == 0){next()}
-  pts_q4 <- data.frame(spsample(x = sa1_shape_frame,
+  pts_q4 <- data.frame(spsample(x = sa3_shape_frame,
                              n = npts_q4,
                              type = "random",
-                             iter = 10)@coords) 
+                             iter = 1000)@coords) 
   pointCollector[[i]] <- pts_q4
 }
-pointFrameq4 <- bind_rows(pointCollector, .id = "sa1_main") %>% 
+pointFrameq4 <- bind_rows(pointCollector, .id = "sa3_code") %>% 
   mutate(IHAD_quartile = as.factor(4))
 pointCollector <- list() # cleaning up after oneself
 
 
-pointFrameSA1aus <- rbind(pointFrameq1, pointFrameq2, pointFrameq3, pointFrameq4)
+pointFrameSA3aus <- rbind(pointFrameq1, pointFrameq2, pointFrameq3, pointFrameq4)
 
-dim(pointFrameSA1aus) # just a check
+dim(pointFrameSA3aus) # just a check
+approx_total_households <- ihad_agg_sa3$dwellings_total %>% sum(na.rm = TRUE) %>% divide_by(perNhh)
+percent_covered_by_dots <- dim(pointFrameSA3aus)[1]/approx_total_households
+percent_covered_by_dots
 # head(pointFrameSA1aus)
 
 randomly <- function(x) sample(xtfrm(x))
 
-pointFrameSA1aus <- pointFrameSA1aus %>% 
-  arrange(randomly(sa1_main))
+pointFrameSA3aus <- pointFrameSA3aus %>% 
+  arrange(randomly(sa3_code))
 
-corresp_sa1_to_gcc <- tibble(sa1_main = sa12016$sa1_main_2016, 
-                             gcc_name_2016 = sa12016$gcc_name_2016)
+corresp_sa3_to_gcc <- tibble(sa3_code = sa32016$sa3_code_2016, 
+                             gcc_name_2016 = sa32016$gcc_name_2016)
 
-pointFrameSA1aus <- pointFrameSA1aus %>% 
-  full_join(corresp_sa1_to_gcc, by = "sa1_main")
+pointFrameSA3aus <- pointFrameSA3aus %>% 
+  full_join(corresp_sa3_to_gcc, by = "sa3_code")
 
 
 
-```
-And now we plot a giant map, covering all of Australia.
+#```
+#And now we plot a giant map, covering all of Australia.
 
-```{r Interactive map of all quartiles, results="show"}
+#```{r Interactive map of all quartiles, results="show"}
 
 # Removing the SA2s with few households (such as Braeside) and getting the file ready for tmap
-sf_sa2_trim <- ihad_agg %>% 
-  select(sa2_name_2016, everything()) %>% 
-  mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
+sf_sa3_trim <- ihad_agg_sa3 %>% 
+  select(sa3_name_2016, everything()) %>% 
+  mutate(perc_Q1 = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
+         perc_Q2 = ifelse(dwellings_total >= 100, round(percentage_q2, 1), NA),
+         perc_Q3 = ifelse(dwellings_total >= 100, round(percentage_q3, 1), NA),
+         perc_Q4 = ifelse(dwellings_total >= 100, round(percentage_q4, 1), NA),
          approx_total_households = round(dwellings_total),
          note = paste0("One dot represents ", perNhh, " households.")) %>% 
   st_as_sf()
 
-# and let's add an SA1 map below too.
-
-sf_sa1 <- ihad_sa1 %>% 
-  st_as_sf()
-
 # now we convert the household locations into longitude and latitude
 
-points_to_plot_aus <- pointFrameSA1aus %>% 
-  mutate(x = ifelse(is.na(x), coords.x1, x),
-         y = ifelse(is.na(y), coords.x2, y)) %>% 
-  select(-c(coords.x1, coords.x2)) %>%
+points_to_plot_aus <- pointFrameSA3aus %>% 
+#  mutate(x = ifelse(is.na(x), coords.x1, x),
+#         y = ifelse(is.na(y), coords.x2, y)) %>% 
+#  select(-c(coords.x1, coords.x2)) %>%
   filter(is.na(x) == FALSE, is.na(y) == FALSE) %>% 
    st_as_sf(coords = c('x', 'y'))
 
@@ -827,15 +871,12 @@ points_to_plot_aus <- pointFrameSA1aus %>%
 
 tmap_mode("view")
 
-int_map_sa1_aus <- tm_shape(sf_sa2_trim) + 
+int_map_sa3_aus <- tm_shape(sf_sa3_trim) + 
   tm_fill(col = "white",  # this time, I don't actually want to shade anything in, I want to dot colour to do it
           alpha = 0,
-          popup.vars = c("sa2_name_2016", "sa3_name_2016", "percentage_of_bottom_quartile_households", "approx_total_households", "note")) +
+          popup.vars = c("sa3_name_2016", "perc_Q1", "perc_Q2", "perc_Q3", "perc_Q4", "approx_total_households", "note")) +
   tm_borders(col = grattan_grey1, 
              lwd = 0.5) +
-  
-  tm_shape(sf_sa1) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower. 
-  tm_borders(col = "red") +
   
   tm_shape(points_to_plot_aus) +
   tm_dots(col = "IHAD_quartile",
@@ -847,22 +888,34 @@ int_map_sa1_aus <- tm_shape(sf_sa2_trim) +
   
   tm_view(dot.size.fixed = FALSE) # prevents dots from scaling as you zoom
 
-# int_map_sa1_aus
+int_map_sa1_aus
 
- tmap_save(tm = int_map_sa1_aus, filename = paste0("Interactive_map_of_disadvantage_and_advantage_in_Australia_", perNhh, ".html"))
+ tmap_save(tm = int_map_sa3_aus, filename = paste0("Interactive_sa3_map_of_disadvantage_and_advantage_in_Australia_", perNhh, ".html"))
 
+ #bulky, and simulating household location over big SA3s is geographically misleading, especially in outback Australia.
+ 
 ```
 
-Plotting the whole country was way too ambitious. Let's break it down into capital cities only.
 
-```{r Simulating households from all quartiles, by GCC}
+
+
+
+
+
+
+
+
+Plotting the whole country is way too ambitious (files are unmanagably large). Let's break it down into capital cities only. Be warned though; simulating at the SA1 level takes a LONG time. This chunk in total takes at least five minutes. Go make some tea, or write the code to simulate at the SA2 level instead.
+
+```{r Simulating households from all quartiles by GCC at the SA1 level}
 
 # Set GCC to speed up the process
 
-city = "Sydney"
+citylist <- c("Sydney", "Melbourne", "Brisbane")
+for(city in citylist){
 
-# 20 is wayyyyy to many, it makes the file ~100MB for all of Australia.
-perNhh <- 20
+# My thinking is that SA1 simulations are too computationally intensive and we should probably just use SA2s.   
+perNhh <- 50
 pointCollector <- list()
 
 # Create one national shapefile
@@ -872,9 +925,6 @@ sa1_sf@data <- temp[ , SA1_MAIN16 := SA1_MAIN16 %>% as.character()]
 sa1_sf <- sa1_sf[sa1_sf$AREASQKM16 > 10^-4, ] # remove those pesky SA1s with zero area (like migratory - offshore or no usual address)
 
 sa1_sf_gcc <- sa1_sf[sa1_sf$GCC_NAME16 == paste0("Greater ", city), ]
-
-# Let's try to simulate the whole country at once and see if it works. 
-# okay so the whole country fails to converge even with iter = 100. Let's restrict it to just the capital cities.
 
 ihad_sa1_gcc <- ihad_sa1 %>%
   mutate(approx_number_q2_households = round(dwellings_total*percentage_q2/100),
@@ -886,9 +936,8 @@ ihad_sa1_gcc <- ihad_sa1 %>%
 for(i in ihad_sa1_gcc$sa1_main_2016){
   sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
   if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1_gcc$approx_number_q1_households[ihad_sa1_gcc$sa1_main_2016 == i])){next()}
-  if(ihad_sa1_gcc$approx_number_q1_households[ihad_sa1_gcc$sa1_main_2016 == i] == 0){next()}
   npts_q1 <- round(ihad_sa1_gcc$approx_number_q1_households[ihad_sa1_gcc$sa1_main_2016 == i]/perNhh)
+  if(is.na(npts_q1)){next()} 
   if(npts_q1 == 0){next()}
   pts_q1 <- data.frame(spsample(x = sa1_shape_frame,
                              n = npts_q1,
@@ -903,9 +952,8 @@ pointCollector <- list() # cleaning up after oneself
 for(i in ihad_sa1_gcc$sa1_main_2016){
   sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
   if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1_gcc$approx_number_q2_households[ihad_sa1_gcc$sa1_main_2016 == i])){next()}
-  if(ihad_sa1_gcc$approx_number_q2_households[ihad_sa1_gcc$sa1_main_2016 == i] == 0){next()}
   npts_q2 <- round(ihad_sa1_gcc$approx_number_q2_households[ihad_sa1_gcc$sa1_main_2016 == i]/perNhh)
+  if(is.na(npts_q2)){next()} 
   if(npts_q2 == 0){next()}
   pts_q2 <- data.frame(spsample(x = sa1_shape_frame,
                              n = npts_q2,
@@ -920,9 +968,8 @@ pointCollector <- list() # cleaning up after oneself
 for(i in ihad_sa1_gcc$sa1_main_2016){
   sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
   if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1_gcc$approx_number_q3_households[ihad_sa1_gcc$sa1_main_2016 == i])){next()}
-  if(ihad_sa1_gcc$approx_number_q3_households[ihad_sa1_gcc$sa1_main_2016 == i] == 0){next()}
   npts_q3 <- round(ihad_sa1_gcc$approx_number_q3_households[ihad_sa1_gcc$sa1_main_2016 == i]/perNhh)
+  if(is.na(npts_q3)){next()} 
   if(npts_q3 == 0){next()}
   pts_q3 <- data.frame(spsample(x = sa1_shape_frame,
                              n = npts_q3,
@@ -937,9 +984,8 @@ pointCollector <- list() # cleaning up after oneself
 for(i in ihad_sa1_gcc$sa1_main_2016){
   sa1_shape_frame <- sa1_sf[sa1_sf$SA1_MAIN16 == i, ]
   if(nrow(sa1_shape_frame) < 1){  next()  }
-  if(is.na(ihad_sa1_gcc$approx_number_q4_households[ihad_sa1_gcc$sa1_main_2016 == i])){next()}
-  if(ihad_sa1_gcc$approx_number_q4_households[ihad_sa1_gcc$sa1_main_2016 == i] == 0){next()}
   npts_q4 <- round(ihad_sa1_gcc$approx_number_q4_households[ihad_sa1_gcc$sa1_main_2016 == i]/perNhh)
+  if(is.na(npts_q4)){next()} 
   if(npts_q4 == 0){next()}
   pts_q4 <- data.frame(spsample(x = sa1_shape_frame,
                              n = npts_q4,
@@ -955,6 +1001,9 @@ pointCollector <- list() # cleaning up after oneself
 pointFrameSA1gcc <- rbind(pointFrameq1, pointFrameq2, pointFrameq3, pointFrameq4)
 
 dim(pointFrameSA1gcc) # just a check
+approx_total_households <- ihad_sa1_gcc$dwellings_total %>% sum(na.rm = TRUE) %>% divide_by(perNhh)
+percent_covered_by_dots <- dim(pointFrameSA1gcc)[1]/approx_total_households
+percent_covered_by_dots
 
 
 randomly <- function(x) sample(xtfrm(x))
@@ -969,20 +1018,39 @@ pointFrameSA1gcc <- pointFrameSA1gcc %>%
   full_join(corresp_sa1_to_gcc, by = "sa1_main")
 
 
+ # tidy up the coordinate pairs
+
+pointFrameSA1gcc <- pointFrameSA1gcc %>%
+  filter(gcc_name_2016 == paste0("Greater ", city)) %>% 
+  mutate(x = ifelse(is.na(x), coords.x1, x),
+         y = ifelse(is.na(y), coords.x2, y)) %>% 
+  select(-c(coords.x1, coords.x2)) %>%
+  filter(is.na(x) == FALSE, is.na(y) == FALSE) 
+
+write_csv(pointFrameSA1gcc, path = paste0("Output/SA1_simulated_dots_", city, ".csv"))
+
+
+}
 
 ```
 
-```{r Interactive map of all quartiles by GCC, results="show"}
+Having simulated (which took a WHILE), we now plot.
 
-# Let's get the files ready for tmap, and split them in GCCs
 
-# We set the city in the last chunk.
-
+```{r Plotting interactive GCC maps with SA1 dots of all quartiles, eval = FALSE}
+# and we plot!
+for(city in citylist){
+  
+  
 sf_sa2_gcc_trim <- ihad_agg %>% 
   select(sa2_name_2016, everything()) %>% 
-  mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
+ mutate(perc_Q1 = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
+         perc_Q2 = ifelse(dwellings_total >= 100, round(percentage_q2, 1), NA),
+         perc_Q3 = ifelse(dwellings_total >= 100, round(percentage_q3, 1), NA),
+         perc_Q4 = ifelse(dwellings_total >= 100, round(percentage_q4, 1), NA),
          approx_total_households = round(dwellings_total),
-         note = paste0("One dot represents ", perNhh, " households.")) %>% 
+         note_A = paste0("One dot represents roughly ", perNhh, " households."),
+         note_B = paste0("These dots cover ", round(100*percent_covered_by_dots, 1), " per cent of the city's households.")) %>% 
   filter(gcc_name_2016 == paste0("Greater ", city)) %>% 
   st_as_sf()
 
@@ -992,42 +1060,329 @@ sf_sa1_gcc <- ihad_sa1 %>%
   filter(gcc_name_2016 == paste0("Greater ", city)) %>% 
   st_as_sf()
 
-# now we convert the household locations into longitude and latitude
+# now we read in our simulated data and convert the household locations into longitude and latitude
+  
+path <-   paste0("Output/SA1_simulated_dots_", city, ".csv")
+data <- read_csv(path) %>%
+  mutate(IHAD_quartile = as.factor(IHAD_quartile))
 
-points_to_plot_gcc <- pointFrameSA1gcc %>%
-  filter(gcc_name_2016 == paste0("Greater ", city)) %>% 
-  mutate(x = ifelse(is.na(x), coords.x1, x),
-         y = ifelse(is.na(y), coords.x2, y)) %>% 
-  select(-c(coords.x1, coords.x2)) %>%
-  filter(is.na(x) == FALSE, is.na(y) == FALSE) %>% 
+points_to_plot_gcc <- data %>% 
    st_as_sf(coords = c('x', 'y'))
 
-# and we plot!
+# and now we plot!
 
 tmap_mode("view")
 
 int_map_sa1_gcc <- tm_shape(sf_sa2_gcc_trim) + 
   tm_fill(col = "white",  # this time, I don't actually want to shade anything in, I want to dot colour to do it
           alpha = 0,
-          popup.vars = c("sa2_name_2016", "sa3_name_2016", "percentage_of_bottom_quartile_households", "approx_total_households", "note")) +
-  tm_borders(col = grattan_grey1, 
+          popup.vars = c("sa2_name_2016", "sa3_name_2016", "perc_Q1", "perc_Q2", "perc_Q3", "perc_Q4", "approx_total_households", "note_A", "note_B")) +
+  tm_borders(col = grattan_grey4, 
              lwd = 0.5) +
   
-  tm_shape(sf_sa1_gcc) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower. 
-  tm_borders(col = "black") +
+#  tm_shape(sf_sa1_gcc) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower. 
+#  tm_borders(col = "black") +
   
   tm_shape(points_to_plot_gcc) +
   tm_dots(col = "IHAD_quartile",
           palette = grattan_pal(4, reverse = TRUE),
           border.alpha = 0,
-          alpha = 0.5, 
+          alpha = 0.8, 
           size = 0.0005, #set to 0.1 or 0.01 if you turn on dot.size.fixed 
           shape = 16) +  #picks circles
   
   tm_view(dot.size.fixed = FALSE) # prevents dots from scaling as you zoom
 
-# int_map_sa1_aus
+int_map_sa1_gcc
 
- tmap_save(tm = int_map_sa1_gcc, filename = paste0("Interactive_map_of_disadvantage_and_advantage_in_", city, "_", perNhh, "_unfixed.html"))
+assign(x = paste0("int_map_all_quartiles_sa1_",city), value = int_map_sa1_gcc, envir = .GlobalEnv)
+assign(x = paste0("pointFrameSA1", city), value = pointFrameSA1gcc, envir = globalenv())
+
+ tmap_save(tm = int_map_sa1_gcc, filename = paste0("Interactive_SA1_map_of_disadvantage_and_advantage_in_", city, "_", perNhh, "_unfixed.html"))
+ 
+
+
+}
+
+
+int_map_all_quartiles_sa1_Sydney
+int_map_all_quartiles_sa1_Melbourne
+int_map_all_quartiles_sa1_Brisbane
 
 ```
+
+
+
+
+Let's simulate at the SA2 level to speed up the process and reduce the file size, acknowledging the loss of locational accuracy that will result.
+
+
+
+
+```{r Simulating households from all quartiles by GCC at the SA2 level, eval = FALSE}
+
+# Set GCC to speed up the process
+
+citylist <- c("Sydney", "Melbourne", "Brisbane")
+for(city in citylist){
+
+perNhh <- 50
+pointCollector <- list()
+
+# Create one national shapefile
+sa2_sf <- SA2_2016
+temp <- SA2_2016@data %>% as.data.table()
+sa2_sf@data <- temp[ , SA2_MAIN16 := SA2_MAIN16 %>% as.character()]
+sa2_sf <- sa2_sf[sa2_sf$AREASQKM16 > 10^-4, ] # remove those pesky SA1s with zero area (like migratory - offshore or no usual address)
+
+sa2_sf_gcc <- sa2_sf[sa2_sf$GCC_NAME16 == paste0("Greater ", city), ]
+
+ihad_sa2_gcc <- ihad_agg %>%
+  filter(areasqkm_2016 > 10^-4,
+         gcc_name_2016 == paste0("Greater ", city))
+
+for(i in ihad_sa2_gcc$sa2_main_2016){
+  sa2_shape_frame <- sa2_sf[sa2_sf$SA2_MAIN16 == i, ]
+  if(nrow(sa2_shape_frame) < 1){  next()  }
+  npts_q1 <- round(ihad_sa2_gcc$approx_number_q1_households[ihad_sa2_gcc$sa2_main_2016 == i]/perNhh)
+  if(is.na(npts_q1)){next()} 
+  if(npts_q1 == 0){next()}
+  pts_q1 <- data.frame(spsample(x = sa2_shape_frame,
+                             n = npts_q1,
+                             type = "random",
+                             iter = 10)@coords) 
+  pointCollector[[i]] <- pts_q1
+}
+pointFrameq1 <- bind_rows(pointCollector, .id = "sa2_main") %>% 
+  mutate(IHAD_quartile = as.factor(1))
+if( "coords.x1" %in%  names(pointFrameq1)){    # we have a problem where SOMETIMES a coordinate is labelled "coords.x1" not "x", and in those situtions we need to convert them back to "x"
+  pointFrameq1 <- pointFrameq1 %>% 
+  mutate(x = ifelse(is.na(x), coords.x1, x),
+         y = ifelse(is.na(y), coords.x2, y)) %>% 
+  select(-c(coords.x1, coords.x2)) %>%
+  filter(is.na(x) == FALSE, is.na(y) == FALSE)
+}
+pointCollector <- list() # cleaning up after oneself
+
+for(i in ihad_sa2_gcc$sa2_main_2016){
+  sa2_shape_frame <- sa2_sf[sa2_sf$SA2_MAIN16 == i, ]
+  if(nrow(sa2_shape_frame) < 1){  next()  }
+  npts_q2 <- round(ihad_sa2_gcc$approx_number_q2_households[ihad_sa2_gcc$sa2_main_2016 == i]/perNhh)
+  if(is.na(npts_q2)){next()} 
+  if(npts_q2 == 0){next()}
+  pts_q2 <- data.frame(spsample(x = sa2_shape_frame,
+                             n = npts_q2,
+                             type = "random",
+                             iter = 10)@coords) 
+  pointCollector[[i]] <- pts_q2
+}
+pointFrameq2 <- bind_rows(pointCollector, .id = "sa2_main")%>% 
+  mutate(IHAD_quartile = as.factor(2))
+if( "coords.x1" %in%  names(pointFrameq2)){
+  pointFrameq1 <- pointFrameq1 %>% 
+  mutate(x = ifelse(is.na(x), coords.x1, x),
+         y = ifelse(is.na(y), coords.x2, y)) %>% 
+  select(-c(coords.x1, coords.x2)) %>%
+  filter(is.na(x) == FALSE, is.na(y) == FALSE)
+}
+pointCollector <- list() # cleaning up after oneself
+
+for(i in ihad_sa2_gcc$sa2_main_2016){
+  sa2_shape_frame <- sa2_sf[sa2_sf$SA2_MAIN16 == i, ]
+  if(nrow(sa2_shape_frame) < 1){  next()  }
+  npts_q3 <- round(ihad_sa2_gcc$approx_number_q3_households[ihad_sa2_gcc$sa2_main_2016 == i]/perNhh)
+  if(is.na(npts_q3)){next()} 
+  if(npts_q3 == 0){next()}
+  pts_q3 <- data.frame(spsample(x = sa2_shape_frame,
+                             n = npts_q3,
+                             type = "random",
+                             iter = 10)@coords) 
+  pointCollector[[i]] <- pts_q3
+}
+pointFrameq3 <- bind_rows(pointCollector, .id = "sa2_main") %>% 
+  mutate(IHAD_quartile = as.factor(3))
+if( "coords.x1" %in%  names(pointFrameq3)){
+  pointFrameq1 <- pointFrameq1 %>% 
+  mutate(x = ifelse(is.na(x), coords.x1, x),
+         y = ifelse(is.na(y), coords.x2, y)) %>% 
+  select(-c(coords.x1, coords.x2)) %>%
+  filter(is.na(x) == FALSE, is.na(y) == FALSE)
+}
+pointCollector <- list() # cleaning up after oneself
+
+for(i in ihad_sa2_gcc$sa2_main_2016){
+  sa2_shape_frame <- sa2_sf[sa2_sf$SA2_MAIN16 == i, ]
+  if(nrow(sa2_shape_frame) < 1){  next()  }
+  npts_q4 <- round(ihad_sa2_gcc$approx_number_q4_households[ihad_sa2_gcc$sa2_main_2016 == i]/perNhh)
+  if(is.na(npts_q4)){next()} 
+  if(npts_q4 == 0){next()}
+  pts_q4 <- data.frame(spsample(x = sa2_shape_frame,
+                             n = npts_q4,
+                             type = "random",
+                             iter = 10)@coords) 
+  pointCollector[[i]] <- pts_q4
+}
+pointFrameq4 <- bind_rows(pointCollector, .id = "sa2_main") %>% 
+  mutate(IHAD_quartile = as.factor(4))
+if( "coords.x1" %in%  names(pointFrameq4)){
+  pointFrameq1 <- pointFrameq1 %>% 
+  mutate(x = ifelse(is.na(x), coords.x1, x),
+         y = ifelse(is.na(y), coords.x2, y)) %>% 
+  select(-c(coords.x1, coords.x2)) %>%
+  filter(is.na(x) == FALSE, is.na(y) == FALSE)
+}
+pointCollector <- list() # cleaning up after oneself
+
+
+pointFrameSA2gcc <- rbind(pointFrameq1, pointFrameq2, pointFrameq3, pointFrameq4)
+
+dim(pointFrameSA2gcc) # just a check
+approx_total_households <- ihad_sa2_gcc$dwellings_total %>% sum(na.rm = TRUE) %>% divide_by(perNhh)
+percent_covered_by_dots <- dim(pointFrameSA2gcc)[1]/approx_total_households
+percent_covered_by_dots
+
+
+randomly <- function(x) sample(xtfrm(x))
+
+pointFrameSA2gcc <- pointFrameSA2gcc %>% 
+  arrange(randomly(sa2_main))
+
+corresp_sa2_to_gcc <- tibble(sa2_main = sa22016$sa2_main_2016, 
+                             gcc_name_2016 = sa22016$gcc_name_2016)
+
+pointFrameSA2gcc <- pointFrameSA2gcc %>% 
+  full_join(corresp_sa2_to_gcc, by = "sa2_main")
+
+
+
+#```
+
+#```{r Interactive map of all quartiles by GCC, results="show"}
+
+# Let's get the files ready for tmap, and split them in GCCs
+
+# We set the city in the last chunk.
+
+sf_sa2_gcc_trim <- ihad_agg %>% 
+  select(sa2_name_2016, everything()) %>% 
+ mutate(perc_Q1 = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
+         perc_Q2 = ifelse(dwellings_total >= 100, round(percentage_q2, 1), NA),
+         perc_Q3 = ifelse(dwellings_total >= 100, round(percentage_q3, 1), NA),
+         perc_Q4 = ifelse(dwellings_total >= 100, round(percentage_q4, 1), NA),
+         approx_total_households = round(dwellings_total),
+         note_A = paste0("One dot represents roughly ", perNhh, " households."),
+         note_B = paste0("These dots cover ", round(100*percent_covered_by_dots, 1), " per cent of the city's households.")) %>% 
+  filter(gcc_name_2016 == paste0("Greater ", city)) %>% 
+  st_as_sf()
+
+
+# now we convert the household locations into longitude and latitude
+
+points_to_plot_gcc <- pointFrameSA2gcc %>%
+  filter(is.na(x) == FALSE) %>% 
+   st_as_sf(coords = c('x', 'y'))
+
+# and we plot!
+
+tmap_mode("view")
+
+int_map_sa2_gcc <- tm_shape(sf_sa2_gcc_trim) + 
+  tm_fill(col = "white",  # this time, I don't actually want to shade anything in, I want to dot colour to do it
+          alpha = 0,
+          popup.vars = c("sa2_name_2016", "sa3_name_2016", "perc_Q1", "perc_Q2", "perc_Q3", "perc_Q4", "approx_total_households", "note_A", "note_B")) +
+  tm_borders(col = grattan_grey4, 
+             lwd = 0.5) +
+  
+  
+  tm_shape(points_to_plot_gcc) +
+  tm_dots(col = "IHAD_quartile",
+          palette = grattan_pal(4, reverse = TRUE),
+          border.alpha = 0,
+          alpha = 0.8, 
+          size = 0.0005, #set to 0.1 or 0.01 if you turn on dot.size.fixed 
+          shape = 16) +  #picks circles
+  
+  tm_view(dot.size.fixed = FALSE) # prevents dots from scaling as you zoom
+
+int_map_sa2_gcc
+
+assign(x = paste0("int_map_all_quartiles_sa2_",city), value = int_map_sa2_gcc, envir = globalenv())
+
+ tmap_save(tm = int_map_sa2_gcc, filename = paste0("Interactive_SA2_map_of_disadvantage_and_advantage_in_", city, "_", perNhh, "_unfixed.html"))
+
+}
+
+int_map_all_quartiles_sa2_Sydney
+int_map_all_quartiles_sa2_Melbourne
+int_map_all_quartiles_sa2_Brisbane
+
+```
+
+Simulating at the SA2 level halved the file size, but maybe that's also because we sampled at 100 homes per dot, not 50. Let's try again sampling at 50 and see if there's any difference. 
+
+
+...
+
+
+Okay so we're back to the old file sizes. Sampling at the SA2 level doesn't help reduce filesize if we keep the same number of dots. As such, there's no real benefit to sampling at the SA2 level, especially given the loss of locational accuracy.
+
+
+Then let's make a static map at the SA1 level.
+
+```{r Static map of all quartiles by GCC at the SA1 level}
+
+citylist <- c("Sydney", "Melbourne", "Brisbane")
+for(city in citylist){
+ 
+ 
+map <- ihad_agg_sa3 %>%
+  filter(gcc_name_2016 == paste0("Greater ", city))
+  
+map_all_quartiles <- ggplot(map)
+map_all_quartiles <- map_all_quartiles + theme_void()
+map_all_quartiles <- map_all_quartiles + geom_sf(aes(geometry = geometry),
+                                                 fill = "white",
+                                                 lwd = 0.1)
+
+path <- paste0("Output/SA1_simulated_dots_", city, ".csv")
+
+data <- read_csv(file = path) %>%
+  mutate(IHAD_quartile = as.factor(IHAD_quartile))
+
+map_all_quartiles <- map_all_quartiles + geom_point(data = data,
+                                                    aes(x = x, y = y, colour = IHAD_quartile),
+                                                    shape = ".",
+                                                    alpha = 0.75)
+
+map_all_quartiles <- map_all_quartiles + scale_colour_manual(values = grattan_pal(4, reverse = TRUE))
+
+
+map_all_quartiles <- map_all_quartiles + theme(legend.position = "right", 
+                                               legend.direction = "vertical",
+                                               legend.text = element_text(size = 12),
+                                               axis.title = element_blank(),
+                                               plot.title = element_text(hjust = 0.5), 
+                                               plot.subtitle = element_text(hjust = 0.5),
+                                               plot.caption = element_text(hjust = 0.5)
+                                               )
+
+map_all_quartiles <- map_all_quartiles +  coord_sf(datum = NA, crs = "+init=epsg:4326")
+
+map_all_quartiles <- map_all_quartiles +  labs(title = paste0("Advantage and disadvantage across Greater ", city), 
+                                              subtitle = "Lighter colour indicates more advantage",
+                                              fill = "IHAD quartile",
+                                              caption = paste0("Each dot represents ", perNhh, " households.\nBased on Grattan Institute analysis of ABS data."))
+
+assign(paste0("All_quartiles_", city), value = map_all_quartiles, envir = globalenv())
+
+}
+
+All_quartiles_Sydney
+All_quartiles_Melbourne
+All_quartiles_Brisbane
+
+
+
+```
+
+
