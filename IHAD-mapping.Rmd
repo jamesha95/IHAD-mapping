@@ -483,36 +483,50 @@ Now let's plot Melbourne.
 
 ```{r Cartography 4: Plotting SA1 dots on a static SA2 map}
 
-# 
+for(city in c("melb", "syd", "bris")){
 
-map_sa2_melb_dots <- ggplot(ihad_sa2_melb_trim)
-map_sa2_melb_dots <- map_sa2_melb_dots + theme_void()
-map_sa2_melb_dots <- map_sa2_melb_dots + geom_sf(aes(geometry = geometry, 
+cityfull <- switch(city, 
+                   "melb" = "Melbourne",
+                   "syd" = "Sydney", 
+                   "bris" = "Brisbane")
+
+ihad_sa2_gcc_trim <- get(paste0("ihad_sa2_", city, "_trim"))
+pointFrameSA1gcc <- get(paste0("pointFrameSA1", city))
+
+map_sa2_gcc_dots <- ggplot(ihad_sa2_gcc_trim)
+map_sa2_gcc_dots <- map_sa2_gcc_dots + theme_void()
+map_sa2_gcc_dots <- map_sa2_gcc_dots + geom_sf(aes(geometry = geometry, 
                                                      fill = percentage_q1),
                                                  lwd = 0)
-map_sa2_melb_dots <- map_sa2_melb_dots + scale_fill_gradientn(colours = grattan_pal(6))
-map_sa2_melb_dots <- map_sa2_melb_dots + geom_point(data = pointFrameSA1melb,
+map_sa2_gcc_dots <- map_sa2_gcc_dots + scale_fill_gradientn(colours = grattan_pal(6))
+map_sa2_gcc_dots <- map_sa2_gcc_dots + geom_point(data = pointFrameSA1gcc,
                                                     aes(x = x, y = y),
                                                     shape = ".",
                                                     colour = "BLACK",
                                                     alpha = 1/2)
 # I don't know why, but some sampled dots have coordinates (x,y) and some have coords (coords.x1, coords.x2). I should investigate and fix, but for now I'll just plot both.
-map_sa2_melb_dots <- map_sa2_melb_dots + geom_point(data = pointFrameSA1melb,
+map_sa2_gcc_dots <- map_sa2_gcc_dots + geom_point(data = pointFrameSA1gcc,
                                                     aes(x = coords.x1, y = coords.x2),
                                                     shape = ".",
                                                     colour = "BLACK",
                                                     alpha = 1/2)
-map_sa2_melb_dots <- map_sa2_melb_dots + theme(legend.position = "right", 
+map_sa2_gcc_dots <- map_sa2_gcc_dots + theme(legend.position = "right", 
                                                legend.direction = "vertical",
-                                               legend.text = element_text(size = 12),
-                                               axis.title = element_blank())
-map_sa2_melb_dots <- map_sa2_melb_dots + coord_sf(datum = NA, crs = "+init=epsg:4238")
-map_sa2_melb_dots <- map_sa2_melb_dots + labs(title = "Disadvantage across Greater Melbourne", 
+                                               legend.text = element_text(size = 18),
+                                               legend.title = element_text(size = 18),
+                                               axis.title = element_blank(), 
+                                              plot.caption = element_text(hjust = 0.5))
+map_sa2_gcc_dots <- map_sa2_gcc_dots + coord_sf(datum = NA, crs = "+init=epsg:4238")
+map_sa2_gcc_dots <- map_sa2_gcc_dots + labs(title = paste0("Disadvantage across Greater ", cityfull), 
                                               subtitle = "Percentage of households in the bottom IHAD quartile",
-                                              fill = "Percentage",
-                                              shape = "50 households")
+                                              fill = "%",
+                                              shape = "50 households",
+                                              caption = "Note: Each dot represents about 50 households, accurate to the nearest SA1.\nSource: Based on Grattan Institute analysis of ABS data.")
 
-map_sa2_melb_dots 
+map_sa2_gcc_dots
+
+grattan_save(paste0("SA2-fill-SA1-dots-", city, ".png"), map_sa2_gcc_dots, type = "fullslide")
+}
 
 ```
 Nice; the actual plotting was very quick using ggplot. 
@@ -521,7 +535,7 @@ Now we're getting fancy. We're simulating dots for groups of households at the S
 
 ```{r Cartography 5: Plotting SA1 dots on a static SA3 map}
 
-# 
+#-------Melbourne-------
 
 map_melb_sa3_dots_sa1 <- ggplot(ihad_sa3_melb)
 map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + theme_void()
@@ -557,9 +571,87 @@ map_melb_sa3_dots_sa1 <- map_melb_sa3_dots_sa1 + labs(title = "Disadvantage acro
 
 map_melb_sa3_dots_sa1
 
-# grattan_save("Melbourne_Disadvantaged_Households.png", 
-#              object = map_melb_sa3_dots_sa1,
-#              type = "fullslide")
+ grattan_save("Melbourne_Disadvantaged_Households.png", 
+              object = map_melb_sa3_dots_sa1,
+              type = "fullslide")
+ 
+#---------Sydney----------
+map_syd_sa3_dots_sa1 <- ggplot(ihad_sa3_syd)
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + theme_void()
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + geom_sf(aes(geometry = geometry, 
+                                                     fill = percentage_q1),
+                                                 lwd = 0)
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + scale_fill_gradientn(colours = grattan_pal(6))
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + geom_point(data = pointFrameSA1syd,
+                                                    aes(x = x, y = y),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+# I don't know why, but some sampled dots have coordinates (x,y) and some have coords (coords.x1, coords.x2). I should investigate and fix, but for now I'll just plot both.
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + geom_point(data = pointFrameSA1syd,
+                                                    aes(x = coords.x1, y = coords.x2),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + theme(legend.position = "right", 
+                                               legend.direction = "vertical",
+                                               legend.text = element_text(size = 12),
+                                               axis.title = element_blank(),
+                                               plot.title = element_text(hjust = 0.5), 
+                                               plot.subtitle = element_text(hjust = 0.5),
+                                               plot.caption = element_text(hjust = 0.5)
+                                               )
+                                              
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + coord_sf(datum = NA, crs = "+init=epsg:4238")
+map_syd_sa3_dots_sa1 <- map_syd_sa3_dots_sa1 + labs(title = "Disadvantage across Greater Sydney", 
+                                              subtitle = "Percentage of households in the bottom IHAD quartile",
+                                              fill = "Percentage",
+                                              caption = "Each dot represents 50 households.\nBased on Grattan Institute analysis of ABS data.")
+
+map_syd_sa3_dots_sa1
+
+ grattan_save("Sydney_Disadvantaged_Households.png", 
+              object = map_syd_sa3_dots_sa1,
+              type = "fullslide")
+ 
+ #---------Brisbane----------
+map_bris_sa3_dots_sa1 <- ggplot(ihad_sa3_bris)
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + theme_void()
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + geom_sf(aes(geometry = geometry, 
+                                                     fill = percentage_q1),
+                                                 lwd = 0)
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + scale_fill_gradientn(colours = grattan_pal(6))
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + geom_point(data = pointFrameSA1bris,
+                                                    aes(x = x, y = y),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+# I don't know why, but some sampled dots have coordinates (x,y) and some have coords (coords.x1, coords.x2). I should investigate and fix, but for now I'll just plot both.
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + geom_point(data = pointFrameSA1bris,
+                                                    aes(x = coords.x1, y = coords.x2),
+                                                    shape = ".",
+                                                    colour = "BLACK",
+                                                    alpha = 1/2)
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + theme(legend.position = "right", 
+                                               legend.direction = "vertical",
+                                               legend.text = element_text(size = 12),
+                                               axis.title = element_blank(),
+                                               plot.title = element_text(hjust = 0.5), 
+                                               plot.subtitle = element_text(hjust = 0.5),
+                                               plot.caption = element_text(hjust = 0.5)
+                                               )
+                                              
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + coord_sf(datum = NA, crs = "+init=epsg:4238")
+map_bris_sa3_dots_sa1 <- map_bris_sa3_dots_sa1 + labs(title = "Disadvantage across Greater Brisbane", 
+                                              subtitle = "Percentage of households in the bottom IHAD quartile",
+                                              fill = "Percentage",
+                                              caption = "Each dot represents 50 households.\nBased on Grattan Institute analysis of ABS data.")
+
+map_bris_sa3_dots_sa1
+
+ grattan_save("Brisbane_Disadvantaged_Households.png", 
+              object = map_bris_sa3_dots_sa1,
+              type = "fullslide")
 
 ```
 
@@ -911,14 +1003,15 @@ Plotting the whole country is way too ambitious (files are unmanagably large). L
 
 # Set GCC to speed up the process
 
-citylist <- c("Sydney", "Melbourne", "Brisbane")
+citylist <- c("Melbourne", "Sydney", "Brisbane")
 for(city in citylist){
 
-# My thinking is that SA1 simulations are too computationally intensive and we should probably just use SA2s.   
+# My thinking is that SA1 simulations are too computationally intensive and we should probably just use SA2s. 
+  # Actually turns out it's just the number of dots that matter. 
 perNhh <- 50
 pointCollector <- list()
 
-# Create one national shapefile
+# Create a shapefile
 sa1_sf <- SA1_2016
 temp <- SA1_2016@data %>% as.data.table()
 sa1_sf@data <- temp[ , SA1_MAIN16 := SA1_MAIN16 %>% as.character()]
@@ -1331,7 +1424,7 @@ Then let's make a static map at the SA1 level.
 
 ```{r Static map of all quartiles by GCC at the SA1 level}
 
-citylist <- c("Sydney", "Melbourne", "Brisbane")
+citylist <- c("Melbourne", "Sydney", "Brisbane")
 for(city in citylist){
  
  
@@ -1377,11 +1470,19 @@ assign(paste0("All_quartiles_", city), value = map_all_quartiles, envir = global
 
 }
 
-All_quartiles_Sydney
+#All_quartiles_Sydney
 All_quartiles_Melbourne
-All_quartiles_Brisbane
+#All_quartiles_Brisbane
 
-
+grattan_save("Melbourne_Advantaged_and_Disadvantaged_Households.png", 
+              object = All_quartiles_Melbourne,
+              type = "fullslide")
+grattan_save("Sydney_Advantaged_and_Disadvantaged_Households.png", 
+              object = All_quartiles_Sydney,
+              type = "fullslide")
+grattan_save("Brisbane_Advantaged_and_Disadvantaged_Households.png", 
+              object = All_quartiles_Brisbane,
+              type = "fullslide")
 
 ```
 
