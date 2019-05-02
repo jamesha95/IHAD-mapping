@@ -659,156 +659,83 @@ And lastly, I want to build an interactive version of the above map, with roads 
 
 We may also want to do some spatial analysis, such as distance from nearest school or an overlap of the congestion scheme region and the number of disadvantaged households.
 
-```{r Interactive map of Melbourne, results="show"}
+```{r Interactive map of cities, results="show"}
 
 # Removing the SA2s with few households (such as Braeside) and getting the file ready for tmap
-sf_sa2_melb_trim <- ihad_sa2_melb %>% 
+
+for(city in c("melb", "syd", "bris")){
+
+cityfull <- switch(city, 
+                   "melb" = "Melbourne",
+                   "syd" = "Sydney", 
+                   "bris" = "Brisbane")
+
+ihad_sa2_gcc <- get(paste0("ihad_sa2_", city))
+pointFrameSA1gcc <- get(paste0("pointFrameSA1", city))
+
+SA2s <- ihad_sa2_gcc %>%  # we've chosen this rather unhelpful name because it will appear in the interactive plot
   select(sa2_name_2016, everything()) %>% 
-  mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
-         approx_number_disadvantaged_households = round(approx_number_q1_households),
-         note = "One dot represents 50 households in the bottom quartile.") %>% 
+  mutate(SA2 = sa2_name_2016,
+         SA3 = sa3_name_2016,
+    `Percentage of bottom-quartile households` = ifelse(dwellings_total >= 100, round(percentage_q1, 2), NA),
+         `Approx. number of bottom-quartile households` = round(approx_number_q1_households),
+         Legend = "One dot represents roughly 50 households in the bottom quartile.",
+         Note = "Dot location is accurate to the nearest SA1.") %>% 
   st_as_sf()
 
 # and let's add an SA1 map below too.
-
-sf_sa1_melb <- ihad_sa1_melb %>% 
-  st_as_sf()
+#ihad_sa1_gcc <- get(paste0("ihad_sa1_", city))
+#sf_sa1_gcc <- ihad_sa1_gcc %>% 
+#  st_as_sf()
 
 # now we convert the household locations into longitude and latitude
 
-points_to_plot_melb <- pointFrameSA1melb %>% 
+Dots <- pointFrameSA1gcc %>% 
   mutate(x = ifelse(is.na(x), coords.x1, x),
-         y = ifelse(is.na(y), coords.x2, y)) %>% 
+         y = ifelse(is.na(y), coords.x2, y),
+         `SA1 code` = sa1_main) %>% 
   select(-c(coords.x1, coords.x2)) %>% 
    st_as_sf(coords = c('x', 'y'))
 
 # and we plot!
 
 tmap_mode("view")
+tmap_options(basemaps = c(leaflet::providers$Esri.WorldGrayCanvas,
+                          leaflet::providers$Esri.WorldTopoMap,
+                          leaflet::providers$Stamen.TonerLite)
+             )
 
-int_map_sa1_melb <- tm_shape(sf_sa2_melb_trim) + 
-  tm_fill(col = "percentage_of_bottom_quartile_households", 
+int_map_sa1_gcc <- tm_shape(SA2s) + 
+  tm_fill(col = "Percentage of bottom-quartile households", 
           palette = grattan_pal(6),
           alpha = 0.5,
-          popup.vars = c("sa2_name_2016", "sa3_name_2016", "percentage_of_bottom_quartile_households", "approx_number_disadvantaged_households", "note")) +
+          popup.vars = c("Percentage of bottom-quartile households", "Approx. number of bottom-quartile households", "Legend", "Note")) +
   tm_borders(col = grattan_grey1, lwd = 0.5) +
   
-  tm_shape(sf_sa1_melb) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower...
-  tm_borders(col = "red") +
+#  tm_shape(sf_sa1_gcc) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower...
+#  tm_borders(col = "red") +
   
-  tm_shape(points_to_plot_melb) +
+  tm_shape(Dots) +
   tm_dots(col = "black",
+          popup.vars = "SA1 code",
+          labels = NULL,
           size = 0.0001, #set to 0.1 or 0.01 if you turn on dot.size.fixed 
           shape = 16) +  #picks black circles
   
   tm_view(dot.size.fixed = FALSE) # prevents dots from scaling as you zoom
 
-int_map_sa1_melb
+int_map_sa1_gcc
 
-tmap_save(tm = int_map_sa1_melb, filename = "Interactive_SA1_map_of_disadvantage_in_Melbourne.html")
+tmap_save(tm = int_map_sa1_gcc, filename = paste0("Interactive_SA1_map_of_disadvantage_in_", cityfull,".html"))
 
+}
 
-```
-
-```{r Interactive map of Sydney}
-
-# Removing the SA2s with few households and getting the file ready for tmap
-sf_sa2_syd_trim <- ihad_sa2_syd %>% 
-  select(sa2_name_2016, everything()) %>% 
-  mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
-         approx_number_disadvantaged_households = round(approx_number_q1_households),
-         note = "One dot represents 50 households in the bottom quartile.") %>% 
-  st_as_sf()
-
-# and let's add an SA1 map below too.
-
-sf_sa1_syd <- ihad_sa1_syd %>% 
-  st_as_sf()
-
-# now we convert the household locations into longitude and latitude
-
-points_to_plot_syd <- pointFrameSA1syd %>% 
-  mutate(x = ifelse(is.na(x), coords.x1, x),
-         y = ifelse(is.na(y), coords.x2, y)) %>% 
-  select(-c(coords.x1, coords.x2)) %>% 
-   st_as_sf(coords = c('x', 'y'))
-
-# and we plot!
-
-tmap_mode("view")
-
-int_map_sa1_syd <- tm_shape(sf_sa2_syd_trim) + 
-  tm_fill(col = "percentage_of_bottom_quartile_households", 
-          palette = grattan_pal(6),
-          alpha = 0.5,
-          popup.vars = c("sa2_name_2016", "sa3_name_2016", "percentage_of_bottom_quartile_households", "approx_number_disadvantaged_households", "note")) +
-  tm_borders(col = grattan_grey1, lwd = 0.5) +
-  
-  tm_shape(sf_sa1_syd) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower. 
-  tm_borders(col = "red") +
-  
-  tm_shape(points_to_plot_syd) +
-  tm_dots(col = "black",
-          size = 0.0001, #set to 0.1 or 0.01 if you turn on dot.size.fixed 
-          shape = 16) +  #picks black circles
-  
-  tm_view(dot.size.fixed = FALSE) # prevents dots from scaling as you zoom
-
-int_map_sa1_syd
-
- tmap_save(tm = int_map_sa1_syd, filename = "Interactive_SA1_map_of_disadvantage_in_Sydney.html")
 
 ```
 
-```{r Interactive map of Brisbane}
 
-# Removing the SA2s with few households (such as Braeside) and getting the file ready for tmap
-sf_sa2_bris_trim <- ihad_sa2_bris %>% 
-  select(sa2_name_2016, everything()) %>% 
-  mutate(percentage_of_bottom_quartile_households = ifelse(dwellings_total >= 100, round(percentage_q1, 1), NA),
-         approx_number_disadvantaged_households = round(approx_number_q1_households),
-         note = "One dot represents 50 households in the bottom quartile.") %>% 
-  st_as_sf()
 
-# and let's add an SA1 map below too.
 
-sf_sa1_bris <- ihad_sa1_bris %>% 
-  st_as_sf()
-
-# now we convert the household locations into longitude and latitude
-
-points_to_plot_bris <- pointFrameSA1bris %>% 
-  mutate(x = ifelse(is.na(x), coords.x1, x),
-         y = ifelse(is.na(y), coords.x2, y)) %>% 
-  select(-c(coords.x1, coords.x2)) %>% 
-   st_as_sf(coords = c('x', 'y'))
-
-# and we plot!
-
-tmap_mode("view")
-
-int_map_sa1_bris <- tm_shape(sf_sa2_bris_trim) + 
-  tm_fill(col = "percentage_of_bottom_quartile_households", 
-          palette = grattan_pal(6),
-          alpha = 0.5,
-          popup.vars = c("sa2_name_2016", "sa3_name_2016", "percentage_of_bottom_quartile_households", "approx_number_disadvantaged_households", "note")) +
-  tm_borders(col = grattan_grey1, lwd = 0.5) +
-  
-  tm_shape(sf_sa1_bris) + # this includes an SA1 map that can be turned on or off. But it also makes the file much larger and a bit slower. 
-  tm_borders(col = "red") +
-  
-  tm_shape(points_to_plot_bris) +
-  tm_dots(col = "black",
-          size = 0.0001, #set to 0.1 or 0.01 if you turn on dot.size.fixed 
-          shape = 16) +  #picks black circles
-  
-  tm_view(dot.size.fixed = FALSE) # prevents dots from scaling as you zoom
-
-int_map_sa1_bris
-
- tmap_save(tm = int_map_sa1_bris, filename = "Interactive_SA1_map_of_disadvantage_in_Brisbane.html")
-
-```
 
 ## Mapping advantage and disadvantage across capital cities
 
@@ -1435,7 +1362,8 @@ map_all_quartiles <- ggplot(map)
 map_all_quartiles <- map_all_quartiles + theme_void()
 map_all_quartiles <- map_all_quartiles + geom_sf(aes(geometry = geometry),
                                                  fill = "white",
-                                                 lwd = 0.1)
+                                                 alpha = 0,
+                                                 lwd = 0.25)
 
 path <- paste0("Output/SA1_simulated_dots_", city, ".csv")
 
@@ -1444,10 +1372,12 @@ data <- read_csv(file = path) %>%
 
 map_all_quartiles <- map_all_quartiles + geom_point(data = data,
                                                     aes(x = x, y = y, colour = IHAD_quartile),
-                                                    shape = ".",
-                                                    alpha = 0.75)
+                                                   # shape = ".",
+                                                    size = 1,
+                                                    alpha = 0.25, # 0.25 smooths the colours nicely, but 0.75 means more obvious dots
+                                                    stroke = 0)
 
-map_all_quartiles <- map_all_quartiles + scale_colour_manual(values = grattan_pal(4, reverse = TRUE))
+map_all_quartiles <- map_all_quartiles + scale_colour_manual(values = c(grattan_pal(4, reverse = TRUE)))
 
 
 map_all_quartiles <- map_all_quartiles + theme(legend.position = "right", 
@@ -1462,9 +1392,9 @@ map_all_quartiles <- map_all_quartiles + theme(legend.position = "right",
 map_all_quartiles <- map_all_quartiles +  coord_sf(datum = NA, crs = "+init=epsg:4326")
 
 map_all_quartiles <- map_all_quartiles +  labs(title = paste0("Advantage and disadvantage across Greater ", city), 
-                                              subtitle = "Lighter colour indicates more advantage",
+                                              subtitle = paste0("One dot per ", perNhh, " households"),
                                               fill = "IHAD quartile",
-                                              caption = paste0("Each dot represents ", perNhh, " households.\nBased on Grattan Institute analysis of ABS data."))
+                                              caption = paste0("Each dot represents roughly", perNhh, " households.\nBased on Grattan Institute analysis of ABS data."))
 
 assign(paste0("All_quartiles_", city), value = map_all_quartiles, envir = globalenv())
 
